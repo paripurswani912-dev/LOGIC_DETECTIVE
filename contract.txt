@@ -1,0 +1,609 @@
+# LOGIC DETECTIVE: THE DIGITAL ESCAPE ROOM
+## Shared Development Contract — Python + Pygame
+
+**Project type:** Digital Electronics Mini-Project  
+**Platform:** Python 3 + Pygame  
+**Game style:** 2D top-down laboratory exploration with interactive puzzle overlays  
+**Team:** Two developers working on separate laptops through one shared GitHub repository  
+**Deadline:** Two days  
+**Core rule:** Build the original four puzzles and story. Add interactive exploration without changing the puzzle concepts.
+
+---
+
+# 1. Project Objective
+
+Create a playable Digital Electronics game in which the player acts as a detective investigating the disappearance of Dr. Elias Voss inside the secret research facility NEXUS-9.
+
+The rogue AI NEXUS has sealed the facility. The player must explore the laboratory, read clues, repair digital circuits, decode transmissions, restore a memory protocol, and complete a final override to escape.
+
+The game must demonstrate Digital Electronics concepts through actual player interaction, not merely through explanatory text.
+
+## Agreed gameplay experience
+
+1. The player enters a 2D laboratory.
+2. The player moves using `W`, `A`, `S`, `D` or the arrow keys.
+3. The player approaches a clue, computer terminal, or locked door.
+4. The player presses `E` to interact.
+5. A puzzle or document opens as an overlay inside the same game window.
+6. The player solves the puzzle.
+7. Correct completion updates the game progress and unlocks the relevant door or area.
+8. Story messages and clues reveal what happened at NEXUS-9.
+9. The final level gives the player two minutes to complete the override.
+
+**Important:** The game has one Pygame window and one main game loop. Do not launch a separate window or Python program for each puzzle.
+
+---
+
+# 2. Story and Level Design
+
+## Opening sequence
+
+Retain the original planned opening scenes:
+
+- **Scene 1 — Title Screen:** Display the game title and Start/Exit options.
+- **Scene 2 — Arrival:** A short introduction showing the detective arriving at NEXUS-9.
+- **Scene 3 — Dr. Voss's Letter:** The player discovers a document that introduces the mystery.
+- **Scene 4 — NEXUS Awakens:** A short lockdown event establishes the danger.
+- **Scene 5 — Investigation Board:** Present the investigation information as a hub or optional overview, then let the player enter the explorable laboratory.
+
+Keep the opening short enough that most of the playtime goes toward exploration and puzzles.
+
+## Level 1 — Logic Lock
+
+**Concepts:** AND and OR gates, Boolean logic, truth tables.
+
+**Story:** The security door is malfunctioning because NEXUS changed the original circuit.
+
+**Clue:**
+
+“The alarm should activate only when BOTH security inputs are active. Check the truth table. Someone has changed the circuit.”
+
+**Required interaction:**
+
+1. Show the clue and the faulty security circuit.
+2. Ask the player to complete the truth table for an AND gate.
+
+| A | B | Y = A AND B |
+|---|---|---|
+| 0 | 0 | 0 |
+| 0 | 1 | 0 |
+| 1 | 0 | 0 |
+| 1 | 1 | 1 |
+
+3. Let the player select AND or OR to repair the circuit.
+4. Let the player test all four input combinations.
+5. Unlock the door only when the selected gate and its outputs are correct.
+6. Display a short log revealing that NEXUS modified the security circuit.
+
+**Completion condition:** Correct truth table, correct gate, and successful tests.
+
+## Level 2 — Hidden Transmission
+
+**Concepts:** Binary-to-decimal conversion and Gray-code-to-binary conversion.
+
+**Story:** The player discovers two sticky notes or maintenance clues left by Dr. Voss.
+
+**Required interaction:**
+
+1. Display the first clue containing a binary number.
+2. Ask the player to convert it to decimal.
+3. Display the second clue containing a Gray-code number.
+4. Ask the player to convert it to binary and then decimal.
+5. Format the two results as four-digit strings and combine them into an eight-digit access code.
+6. Validate the code and unlock the next area.
+
+**Design requirements:**
+
+- Choose and verify the final numbers before implementation.
+- Ensure the two decoded values are correct and produce the intended eight-digit code.
+- Display leading zeros when formatting four-digit values.
+- Provide feedback for incorrect answers without immediately skipping the puzzle.
+- Do not hardcode a result that contradicts the displayed clues.
+
+**Story reveal:** NEXUS was originally designed to protect the facility. Dr. Voss did not intend for it to imprison anyone, but its objective or behaviour changed.
+
+## Level 3 — Memory Protocol
+
+**Concepts:** Finite-state machines (FSMs), states, transitions, and input sequences.
+
+**Story:** The player reaches a controller that stores the laboratory's emergency shutdown protocol.
+
+**Required interaction:**
+
+1. Display a maintenance log containing the protocol information.
+2. Show four coloured switches: red, yellow, blue, and green.
+3. The player activates the switches in the required order.
+4. Each valid input moves the controller to its next state.
+5. An incorrect input resets the attempt according to the agreed FSM.
+6. Reaching the final state restores the controller and unlocks the next area.
+
+**FSM contract:**
+
+- Define the state diagram and input sequence before coding.
+- Use the same state names and transitions in the puzzle logic, maintenance log, and testing.
+- The sequence and transition rules must be consistent.
+- The switch interface must visibly indicate the selected colour.
+- Do not make this a random colour-memory game. The clues and FSM rules must determine the correct sequence.
+
+**Story reveal:** The shutdown command is blocked by NEXUS, so the detective must use an override.
+
+## Level 4 — Final Override
+
+**Concepts:** Boolean expressions, logic evaluation, and timed problem-solving.
+
+**Story:** The player reaches the NEXUS core and must complete the final override before the countdown expires.
+
+**Required interaction:**
+
+1. Display the final instructions.
+2. Start a two-minute countdown only when the actual challenge becomes active.
+3. Show a Boolean expression and its input values.
+4. Let the player evaluate the expression and select or enter the output.
+5. On a correct answer, stop the timer and unlock the exit.
+6. On timeout or an incorrect answer, allow the player to retry Level 4 without resetting Levels 1–3.
+
+**Example expression:**
+
+\[
+Y=(A\cdot B)+\overline{C}
+\]
+
+For \(A=1,\ B=0,\ C=0\), the correct output is \(Y=1\).
+
+The final expression, input values, and accepted answer must agree.
+
+**Ending:** Show the detective escaping or unlocking the exit. Leave a brief indication that NEXUS may still be online.
+
+---
+
+# 3. Technology and Coding Rules
+
+- Use Python 3 and Pygame.
+- Use one window, one event loop, and one display surface.
+- Use simple shapes and text for the first working version.
+- Use a fixed, compact laboratory map rather than a large open world.
+- Implement player movement, wall collision, interaction range, and locked doors.
+- Use puzzle overlays or game modes for documents and puzzles.
+- Keep puzzle calculations separate from drawing code where practical.
+- Use consistent screen dimensions, colours, fonts, and interaction prompts.
+- Avoid adding combat, inventory systems, complex animation, networking, or unnecessary features.
+- The project must run locally without requiring an internet connection.
+- Never allow a puzzle module to create its own Pygame window or start its own main loop.
+
+Suggested initial settings:
+
+- Window: 1000 × 650 pixels
+- Frame rate: 60 FPS
+- Movement speed: approximately 220 pixels per second
+- Interaction key: `E`
+- Close or return from a puzzle: `Escape`, only when permitted
+- Timer for Level 4: 120 seconds
+
+All adjustable settings belong in `settings.py`.
+
+---
+
+# 4. Agreed File and Folder Structure
+
+Create this exact initial structure in the shared repository:
+
+```text
+logic_detective/
+│
+├── main.py
+├── settings.py
+├── game_state.py
+├── player.py
+├── laboratory.py
+├── interactions.py
+├── ui.py
+├── story.py
+├── progress.py
+│
+├── puzzles/
+│   ├── __init__.py
+│   ├── base_puzzle.py
+│   ├── logic_lock.py
+│   ├── hidden_transmission.py
+│   ├── memory_protocol.py
+│   └── final_override.py
+│
+├── tests/
+│   ├── test_logic_lock.py
+│   ├── test_hidden_transmission.py
+│   ├── test_memory_protocol.py
+│   └── test_final_override.py
+│
+├── assets/
+│   ├── images/
+│   └── sounds/
+│
+├── README.md
+├── requirements.txt
+└── .gitignore
+```
+
+Create empty asset folders initially if needed. The game must still run before custom images or sounds are added.
+
+## File ownership and responsibilities
+
+### `main.py` — Application entry point
+
+Responsible for:
+
+- Initialising Pygame and the display.
+- Creating the player, laboratory, interaction manager, and progress tracker.
+- Running the main event loop.
+- Updating the active game mode.
+- Drawing the correct screen.
+- Handling application exit and Pygame cleanup.
+
+Must not contain the detailed logic for all four puzzles.
+
+### `settings.py` — Shared constants
+
+Contains:
+
+- Screen width and height.
+- FPS and player speed.
+- Colours and UI settings.
+- Window title.
+- Interaction distance.
+- Timer duration.
+- Other shared configuration values.
+
+### `game_state.py` — Current game mode
+
+Manages which part of the game is active, such as:
+
+- Title screen.
+- Opening story.
+- Laboratory exploration.
+- Document view.
+- Puzzle overlay.
+- Level-completion message.
+- Ending screen.
+
+Use consistent state names or constants. Do not scatter unrelated string values throughout the project.
+
+### `player.py` — Player movement
+
+Create a `Player` class with these methods:
+
+- `__init__(...)` — Initialise position, size, speed, and collision rectangle.
+- `handle_movement(keys, dt)` — Move the player using keyboard input.
+- `resolve_collisions(obstacles)` — Prevent walking through walls or locked obstacles.
+- `draw(screen)` — Draw the player.
+- `get_rect()` — Return the player's collision rectangle.
+
+Movement must be frame-rate independent by using `dt`, the elapsed time between frames.
+
+### `laboratory.py` — Map and world objects
+
+Create a `Laboratory` class with these methods:
+
+- `draw(screen)` — Draw the map, walls, terminals, and doors.
+- `get_obstacles()` — Return the obstacles used for collision.
+- `get_interactable_objects()` — Return objects the player can interact with.
+- `get_nearby_interactable(player)` — Find an available object within interaction range.
+- `is_area_unlocked(area_id)` — Check whether an area is accessible.
+- `update_door_states(progress)` — Update doors according to puzzle progress.
+
+Use simple shapes initially. Puzzle correctness must not depend on decorative images.
+
+### `interactions.py` — Interaction handling
+
+Create an `InteractionManager` class with these methods:
+
+- `find_nearby_object(player, objects)` — Identify the closest valid object.
+- `handle_event(event, player, game_state)` — Process interaction input.
+- `draw_prompt(screen, nearby_object)` — Show a prompt such as `Press E to interact`.
+- `interact_with(object_id, game_state)` — Request the appropriate document, terminal, or door interaction.
+
+This module coordinates interactions; it must not duplicate the puzzle calculations.
+
+### `ui.py` — Reusable interface components
+
+Implement reusable functions:
+
+- `draw_text(...)`
+- `draw_panel(...)`
+- `draw_button(...)`
+- `draw_interaction_prompt(...)`
+- `draw_status_message(...)`
+- `draw_progress_indicator(...)`
+- `draw_document_panel(...)`
+- `draw_timer(...)`
+
+Use a consistent visual style. The functions must draw on the supplied screen rather than opening windows.
+
+### `story.py` — Narrative content
+
+Implement:
+
+- `get_document(document_id)`
+- `get_dialogue(scene_id)`
+- `get_level_success_message(level_id)`
+
+Keep story text here so that it can be edited without changing puzzle logic.
+
+### `progress.py` — Puzzle completion and progression
+
+Create a `ProgressManager` class with these methods:
+
+- `get_next_puzzle_id()`
+- `can_start_puzzle(puzzle_id)`
+- `complete_puzzle(puzzle_id)`
+- `check_final_completion()`
+
+Track which levels are completed. Completing a puzzle must update the relevant door or area state. Retrying Level 4 must not erase earlier completed levels.
+
+---
+
+# 5. The Shared Puzzle Interface
+
+Every puzzle must follow the same interface. This is the most important agreement for the two developers.
+
+In `puzzles/base_puzzle.py`, define a common `BasePuzzle` class with:
+
+```python
+class BasePuzzle:
+    def handle_event(self, event):
+        pass
+
+    def update(self, dt):
+        pass
+
+    def draw(self, screen):
+        pass
+
+    def is_solved(self):
+        return False
+
+    def reset_attempt(self):
+        pass
+```
+
+Each actual puzzle class inherits from `BasePuzzle`:
+
+- `LogicLockPuzzle`
+- `HiddenTransmissionPuzzle`
+- `MemoryProtocolPuzzle`
+- `FinalOverridePuzzle`
+
+Each class must implement the same five methods.
+
+### Rules for every puzzle module
+
+1. `handle_event(event)` processes keyboard or mouse input for the active puzzle.
+2. `update(dt)` updates any time-dependent behaviour.
+3. `draw(screen)` draws the puzzle overlay on the existing window.
+4. `is_solved()` returns `True` only when the puzzle's actual completion conditions are met.
+5. `reset_attempt()` resets that puzzle's current attempt without erasing unrelated game progress.
+
+Additional helper functions are allowed inside a puzzle module, but do not change the five shared method names or their basic purpose.
+
+For example, `logic_lock.py` may have a helper that evaluates AND/OR outputs. The other modules do not need to use that helper.
+
+**Integration rule:** The main game checks `is_solved()` and then tells the progress manager to complete the puzzle. The puzzle itself does not unlock every door, modify the global game state directly, or import `main.py`.
+
+---
+
+# 6. Puzzle-Specific Implementation Contracts
+
+## `puzzles/logic_lock.py`
+
+Implement:
+
+- The AND truth-table data.
+- Player input for the truth table.
+- AND/OR gate selection.
+- Testing all four input combinations.
+- Validation and error feedback.
+- A solved state only after all required conditions are correct.
+
+Keep the gate calculation separate from the UI drawing.
+
+## `puzzles/hidden_transmission.py`
+
+Implement:
+
+- Binary-to-decimal conversion.
+- Gray-code-to-binary conversion.
+- Binary-to-decimal conversion of the resulting binary value.
+- Four-digit formatting for both results.
+- Eight-digit code generation and validation.
+- Feedback and retry handling.
+
+Keep conversion logic in testable helper functions rather than placing all calculations inside `draw()`.
+
+## `puzzles/memory_protocol.py`
+
+Implement:
+
+- The agreed finite-state machine.
+- Four coloured switch controls.
+- The maintenance-log clue.
+- Current-state tracking.
+- Valid and invalid transition handling.
+- Reset behaviour on an incorrect input.
+- Completion when the correct final state is reached.
+
+The FSM's transitions must be defined once and used consistently. Do not implement a separate, contradictory sequence inside the UI.
+
+## `puzzles/final_override.py`
+
+Implement:
+
+- The Boolean expression and its input values.
+- Output calculation and answer validation.
+- A 120-second countdown.
+- A start condition that begins timing only when the active challenge appears.
+- Timeout handling.
+- Retry handling that resets the Level 4 attempt and timer.
+- A solved state that stops the countdown.
+
+Do not run the timer while the player is reading the opening instructions or exploring earlier levels.
+
+---
+
+# 7. Integration Rules
+
+These rules prevent incompatible AI-generated code.
+
+1. **One shared interface:** All developers use the file structure and method names in this document.
+2. **No surprise renaming:** Do not rename files, classes, methods, or parameters without agreeing with the other developer first.
+3. **No circular imports:** Puzzle modules must not import `main.py`. Shared settings and base interfaces may be imported where required.
+4. **One owner for progression:** Only the main game/progress manager controls global puzzle completion and door unlocking.
+5. **One owner for puzzle calculations:** Each puzzle module owns its own answer validation and puzzle-specific state.
+6. **No separate windows:** All overlays draw on the existing Pygame display.
+7. **No hidden scope expansion:** Do not add new levels, multiplexer puzzles, decoders, seven-segment displays, parity puzzles, or unrelated mechanics without mutual agreement.
+8. **Keep the project runnable:** Integrate small changes regularly rather than waiting until all files are finished.
+9. **Use explicit integration instructions:** If a module needs a new shared function, discuss and update the contract before generating code that depends on it.
+10. **Prefer simple working code:** A fully playable game with four consistent puzzles is better than a visually elaborate but incomplete game.
+
+---
+
+# 8. Testing Requirements
+
+Each puzzle must have tests for its underlying logic.
+
+- `test_logic_lock.py`: Verify all four AND outputs and reject an incorrect gate or incomplete solution.
+- `test_hidden_transmission.py`: Verify conversion results, Gray-code conversion, four-digit formatting, and code validation.
+- `test_memory_protocol.py`: Verify valid transitions, invalid transitions, reset behaviour, and reaching the final state.
+- `test_final_override.py`: Verify the Boolean answer, correct completion, timeout, and retry behaviour.
+
+The main game must also be manually tested for:
+
+- Starting and exiting the game.
+- Player movement and collision.
+- Interaction prompts appearing only near valid objects.
+- `E` opening the correct object.
+- Puzzle overlays opening and closing correctly.
+- Correct solutions unlocking the intended doors.
+- Incorrect answers not unlocking doors.
+- Level 4 timing and retry behaviour.
+- Previously completed levels remaining completed after a Level 4 retry.
+
+Test the game on both developers' laptops before submission.
+
+---
+
+# 9. Two-Person Development Workflow
+
+Both developers must clone the same GitHub repository and use the same Python/Pygame setup.
+
+## Developer A — Core game and integration
+
+Responsible for:
+
+- `main.py`
+- `settings.py`
+- `game_state.py`
+- `player.py`
+- `laboratory.py`
+- `interactions.py`
+- `ui.py`
+- `story.py`
+- `progress.py`
+- Integrating the puzzle modules.
+- Testing movement, interactions, doors, and overall progression.
+
+## Developer B — Puzzle modules and puzzle tests
+
+Responsible for:
+
+- `puzzles/base_puzzle.py`
+- `puzzles/logic_lock.py`
+- `puzzles/hidden_transmission.py`
+- `puzzles/memory_protocol.py`
+- `puzzles/final_override.py`
+- All four puzzle test files.
+- Verifying puzzle answers and edge cases.
+- Testing that every puzzle follows the agreed interface.
+
+Both developers should review the other person's work and help test the integrated game. Ownership identifies the primary implementer, not an exclusive right to modify files.
+
+### GitHub rules
+
+- Keep `main` in a runnable state.
+- Use separate branches for assigned work.
+- Commit small, understandable changes.
+- Pull the latest shared changes before starting new work.
+- Do not overwrite the teammate's work with a complete AI-generated replacement.
+- Merge and test each module before depending on it elsewhere.
+
+---
+
+# 10. How Both Developers Must Use AI
+
+Before asking ChatGPT, Claude, or another AI to generate code, provide the relevant contract and the specific file assignment.
+
+Every code-generation request must specify:
+
+1. The exact file to create or modify.
+2. The purpose of that file.
+3. Its agreed class and method names.
+4. The imports it is allowed to use.
+5. The files it must work with.
+6. The expected behaviour and completion conditions.
+7. The instruction not to modify unrelated files or change the shared interface.
+
+### Example prompt
+
+“Implement `puzzles/logic_lock.py` according to our shared Logic Detective development contract. Create `LogicLockPuzzle`, inheriting from `BasePuzzle`, and implement `handle_event(event)`, `update(dt)`, `draw(screen)`, `is_solved()`, and `reset_attempt()`. Include the AND truth table, gate selection, all four test combinations, and answer validation. Use the existing shared settings and UI conventions. Do not create another Pygame window, import `main.py`, change other files, or rename the shared methods. Explain any integration assumptions before adding dependencies.”
+
+After generating code, inspect it, run it, test it, and commit it. Do not assume code is correct merely because an AI produced it.
+
+---
+
+# 11. Two-Day Build Schedule
+
+## Day 1 — Working game foundation
+
+1. Create the repository and folder structure.
+2. Set up Python and Pygame.
+3. Display the title screen and enter the laboratory.
+4. Implement player movement and collision.
+5. Implement nearby-object detection and the `E` interaction prompt.
+6. Open and close one sample puzzle overlay.
+7. Complete Level 1 and connect its solved state to a door.
+8. Test and merge the first working version.
+
+**Day 1 milestone:** The player can explore the laboratory, interact with a terminal, solve the first puzzle, and unlock a door.
+
+## Day 2 — Complete and integrate
+
+1. Implement and test Level 2.
+2. Implement and test Level 3.
+3. Implement and test Level 4 and its countdown.
+4. Connect story clues and completion messages.
+5. Test puzzle progression, collision, incorrect answers, and retries.
+6. Fix integration bugs.
+7. Add minimal visual polish and prepare the final demonstration.
+
+**Day 2 milestone:** All four original puzzles are playable in one connected game, with the ending reachable through correct progression.
+
+---
+
+# 12. Definition of Done
+
+The project is ready for demonstration when:
+
+- The title and opening scenes work.
+- The player can explore the laboratory and interact with objects.
+- All four original puzzles work and validate their answers correctly.
+- Puzzle overlays run inside one Pygame window.
+- Solving a puzzle updates progression and unlocks the intended area.
+- Incorrect answers and retries behave correctly.
+- The final override has a working two-minute countdown.
+- The ending is reachable without manually changing game variables.
+- The game runs on both developers' computers.
+- The README contains setup and launch instructions.
+- Both developers can explain their own files and the overall integration.
+
+## Final agreement
+
+We are building **Logic Detective: The Digital Escape Room** using the original story and four original puzzle concepts. The only borrowed design element is the interactive 2D exploration experience: movement, proximity-based interaction, terminal overlays, and doors that unlock as the player progresses.
+
+This contract is the common reference for both developers and both AI assistants. If something is not defined here, agree on it before making it a dependency. The priority is a working, understandable, integrated game—not additional features that risk the deadline.
