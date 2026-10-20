@@ -1,0 +1,156 @@
+# Level 6: Signal Breaker — Serial shift-register challenge
+import pygame
+from .base_puzzle import BasePuzzle
+import settings
+
+
+class SignalBreakerPuzzle(BasePuzzle):
+    """Load a target pattern into a 4-bit shift register using serial input."""
+
+    TARGET = "1011"
+
+    def __init__(self):
+        super().__init__()
+        self.register = [0, 0, 0, 0]
+        self.direction = "LEFT"
+        self.serial_bit = 0
+        self.clock_count = 0
+        self.message = "Choose a serial bit, direction, then pulse the clock."
+        self.history = []
+
+    def set_bit(self, bit):
+        self.serial_bit = int(bit)
+        self.message = f"Serial input set to {self.serial_bit}."
+
+    def set_direction(self, direction):
+        self.direction = direction
+        self.message = f"Shift direction: {direction}."
+
+    def clock_pulse(self):
+        if self.direction == "LEFT":
+            self.register = self.register[1:] + [self.serial_bit]
+        else:
+            self.register = [self.serial_bit] + self.register[:-1]
+        self.clock_count += 1
+        state = "".join(map(str, self.register))
+        self.history.append(f"Clock {self.clock_count}: {state}")
+        self.history = self.history[-4:]
+        self.message = f"Clock pulse applied. Register = {state}"
+
+    def check_target(self):
+        state = "".join(map(str, self.register))
+        if state == self.TARGET:
+            self.solved = True
+            self.message = "TARGET MATCHED! Final transmission recovered."
+        else:
+            self.message = f"Mismatch: register is {state}; target is {self.TARGET}."
+
+    def handle_event(self, event):
+        if self.solved:
+            return
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_0:
+                self.set_bit(0)
+            elif event.key == pygame.K_1:
+                self.set_bit(1)
+            elif event.key == pygame.K_l:
+                self.set_direction("LEFT")
+            elif event.key == pygame.K_r:
+                self.set_direction("RIGHT")
+            elif event.key == pygame.K_SPACE:
+                self.clock_pulse()
+            elif event.key == pygame.K_RETURN:
+                self.check_target()
+            elif event.key == pygame.K_BACKSPACE:
+                self.register = [0, 0, 0, 0]
+                self.clock_count = 0
+                self.history.clear()
+                self.message = "Register reset to 0000."
+
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            x, y = event.pos
+            if 60 <= y <= 115:
+                if 60 <= x < 250:
+                    self.set_bit(0)
+                elif 260 <= x < 450:
+                    self.set_bit(1)
+                elif 460 <= x < 650:
+                    self.set_direction("LEFT")
+                elif 660 <= x < 850:
+                    self.set_direction("RIGHT")
+            elif 60 <= x <= 250 and 130 <= y <= 190:
+                self.clock_pulse()
+            elif 270 <= x <= 460 and 130 <= y <= 190:
+                self.check_target()
+            elif 480 <= x <= 670 and 130 <= y <= 190:
+                self.register = [0, 0, 0, 0]
+                self.clock_count = 0
+                self.history.clear()
+                self.message = "Register reset to 0000."
+
+    def draw(self, screen):
+        screen.fill(settings.DARK_BLUE)
+        title = pygame.font.Font(None, 42)
+        heading = pygame.font.Font(None, 28)
+        body = pygame.font.Font(None, 22)
+        small = pygame.font.Font(None, 19)
+
+        def write(text, font, color, x, y, center=False):
+            image = font.render(text, True, color)
+            rect = image.get_rect()
+            if center:
+                rect.center = (x, y)
+            else:
+                rect.topleft = (x, y)
+            screen.blit(image, rect)
+
+        write("LEVEL 6: SIGNAL BREAKER", title, settings.CYAN, 35, 25)
+        write("SEQUENTIAL LOGIC / 4-BIT SHIFT REGISTER", body, settings.GREY, 38, 70)
+        pygame.draw.rect(screen, settings.PANEL_BLUE, (60, 105, 880, 85), border_radius=10)
+        write("TARGET PATTERN", small, settings.GREY, 85, 118)
+        write(self.TARGET, title, settings.GREEN, 85, 140)
+        write("Serial input:", body, settings.WHITE, 340, 125)
+        write(str(self.serial_bit), title, settings.YELLOW, 455, 120)
+        write(f"Direction: {self.direction}", body, settings.WHITE, 550, 130)
+
+        # Input buttons
+        buttons = [
+            (60, 190, "BIT 0 [0]", settings.CYAN),
+            (260, 190, "BIT 1 [1]", settings.CYAN),
+            (460, 190, "SHIFT LEFT [L]", settings.GREEN),
+            (660, 190, "SHIFT RIGHT [R]", settings.YELLOW),
+        ]
+        for x, width, label, color in buttons:
+            rect = pygame.Rect(x, 210, width, 52)
+            pygame.draw.rect(screen, color, rect, border_radius=8)
+            image = body.render(label, True, settings.DARK_BLUE)
+            screen.blit(image, image.get_rect(center=rect.center))
+
+        write("REGISTER", heading, settings.CYAN, 85, 290)
+        for i, bit in enumerate(self.register):
+            rect = pygame.Rect(250 + i * 120, 280, 95, 75)
+            pygame.draw.rect(screen, settings.GREEN if bit else settings.PANEL_BLUE,
+                             rect, border_radius=8)
+            pygame.draw.rect(screen, settings.WHITE, rect, 2, border_radius=8)
+            ink = settings.DARK_BLUE if bit else settings.WHITE
+            write(str(bit), title, ink, rect.centerx, rect.centery, True)
+        write(f"Clock pulses: {self.clock_count}", body, settings.WHITE, 250, 365)
+
+        action_buttons = [
+            (60, 190, "CLOCK PULSE [SPACE]", settings.CYAN),
+            (270, 190, "CHECK TARGET [ENTER]", settings.GREEN),
+            (480, 190, "RESET [BACKSPACE]", settings.RED),
+        ]
+        for x, width, label, color in action_buttons:
+            rect = pygame.Rect(x, 405, width, 55)
+            pygame.draw.rect(screen, color, rect, border_radius=8)
+            image = small.render(label, True, settings.DARK_BLUE)
+            screen.blit(image, image.get_rect(center=rect.center))
+
+        write("EVENT LOG", heading, settings.CYAN, 70, 480)
+        for i, line in enumerate(self.history[-4:]):
+            write(line, small, settings.WHITE, 75, 513 + i * 21)
+        write("Hint: start at 0000, shift LEFT, and clock in bits 1, 0, 1, 1.",
+              small, settings.YELLOW, 60, 610)
+        if self.solved:
+            write("LEVEL COMPLETE", heading, settings.GREEN, 700, 610)
