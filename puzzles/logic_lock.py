@@ -319,19 +319,23 @@ class LogicLockPuzzle(BasePuzzle):
         y += 36
 
         # 3. Single-line challenge.
-        instruction = (
-            "THE ALARM ACTIVATES ONLY WHEN BOTH INPUTS ARE ON. "
-            "CAN YOU PROVE YOUR LOGIC, DETECTIVE?"
-        )
+        # Keep instructions readable without pushing the truth table
+        # into the result-message area.
+        instruction_lines = [
+            "Input A: Smoke sensor detects smoke.",
+            "Input B: Security system is armed.",
+            "Alarm activates only when BOTH inputs are ON.",
+        ]
 
-        instruction_surface = self._fit_text(
-            instruction,
-            content_width,
-            14,
-            (222, 232, 244),
-        )
-        screen.blit(instruction_surface, (left, y))
-        y += 30
+        instruction_font = self._make_font(17)
+        for line in instruction_lines:
+            surface = instruction_font.render(
+                line, False, (222, 232, 244)
+            )
+            screen.blit(surface, (left, y))
+            y += 23
+
+        y += 4
 
         pygame.draw.line(
             screen, (48, 75, 105),
@@ -380,7 +384,7 @@ class LogicLockPuzzle(BasePuzzle):
 
         gap = 14
         gate_width = (content_width - gap) // 2
-        gate_height = 34
+        gate_height = 31
 
         and_rect = pygame.Rect(
             left, y, gate_width, gate_height
@@ -428,7 +432,7 @@ class LogicLockPuzzle(BasePuzzle):
             or_label.get_rect(center=or_rect.center)
         )
 
-        y += gate_height + 13
+        y += gate_height + 9
 
         # 6. Circuit table.
         self._draw_text(
