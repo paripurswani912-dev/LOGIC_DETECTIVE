@@ -149,7 +149,7 @@ class DetectiveNotebook:
 
         # Interactive Logic Gates reference
         self.gate_names = [
-            "AND", "OR", "XOR", "NAND", "NOR", "XNOR"
+            "AND", "OR", "XOR", "NAND", "NOR", "XNOR", "NOT"
         ]
         self.selected_gate = "AND"
         self.gate_a = 0
@@ -275,10 +275,12 @@ class DetectiveNotebook:
                 self._move_selection(1)
                 return True
 
-            if event.key in (pygame.K_LEFT, pygame.K_a):
-                if self.page == "reference_topic" and (
-                    self.selected_level == "LOGIC GATES"
-                ):
+            if event.key == pygame.K_a and self.page == "reference_topic" and self.selected_level == "LOGIC GATES":
+                self.gate_a = 1 - self.gate_a
+                return True
+
+            if event.key == pygame.K_LEFT:
+                if self.page == "reference_topic" and self.selected_level == "LOGIC GATES":
                     self._move_gate(-1)
                     return True
 
@@ -766,160 +768,221 @@ class DetectiveNotebook:
             return int(not (a or b))
         if gate == "XNOR":
             return int(a == b)
+        if gate == "NOT":
+            return 1 - int(a)
         return 0
 
+    def _draw_gate_symbol(self, screen, gate, rect, color):
+        """Draw chunky, reference-style pixel logic-gate symbols."""
+        rect = pygame.Rect(rect)
+        x, y, w, h = rect
+        # Use a smaller inset so symbols never collide with card borders.
+        left = x + int(w * 0.20)
+        right = x + int(w * 0.77)
+        top = y + int(h * 0.15)
+        bottom = y + int(h * 0.85)
+        mid = (top + bottom) // 2
+        stroke = max(2, min(4, h // 10))
+
+        def line(points, width=stroke):
+            pts = [(int(px), int(py)) for px, py in points]
+            if len(pts) >= 2:
+                pygame.draw.lines(screen, color, False, pts, width)
+                # Pixel-like square joints, matching the reference artwork.
+                for px, py in pts:
+                    pygame.draw.rect(screen, color,
+                                     (px-width//2, py-width//2, width, width))
+
+        def bubble(cx, cy, radius=max(3, stroke + 1)):
+            # Hollow output bubble; do not fill it.
+            pygame.draw.rect(screen, color,
+                             (int(cx-radius), int(cy-radius), radius*2, radius*2),
+                             max(2, stroke))
+
+        if gate == "NOT":
+            # NOT has one input and a triangular inverter with output bubble.
+            line([(left, top), (right-7, mid), (left, bottom), (left, top)])
+            pygame.draw.line(screen, color, (x+2, mid), (left, mid), stroke)
+            bubble(right-3, mid, max(3, stroke+1))
+            pygame.draw.line(screen, color, (right+5, mid), (x+w-2, mid), stroke)
+            return
+
+        in_top = y + int(h * 0.34)
+        in_bottom = y + int(h * 0.66)
+        pygame.draw.line(screen, color, (x+2, in_top), (left, in_top), stroke)
+        pygame.draw.line(screen, color, (x+2, in_bottom), (left, in_bottom), stroke)
+
+        if gate in ("AND", "NAND"):
+            # Flat left side and rounded/stepped right side.
+            line([(left, top), (left + (right-left)*0.48, top),
+                  (right-8, top + (bottom-top)*0.20),
+                  (right, mid),
+                  (right-8, bottom - (bottom-top)*0.20),
+                  (left + (right-left)*0.48, bottom),
+                  (left, bottom), (left, top)])
+        else:
+            # OR-family has the curved concave input side and pointed output.
+            if gate in ("XOR", "XNOR"):
+                line([(left-9, top), (left+1, mid), (left-9, bottom)])
+            line([(left, top),
+                  (left + (right-left)*0.28, top),
+                  (left + (right-left)*0.66, top + (bottom-top)*0.13),
+                  (right, mid),
+                  (left + (right-left)*0.66, bottom - (bottom-top)*0.13),
+                  (left + (right-left)*0.28, bottom),
+                  (left, bottom),
+                  (left + (right-left)*0.10, mid),
+                  (left, top)])
+
+        if gate in ("NAND", "NOR", "XNOR"):
+            bubble(right+4, mid, max(3, stroke+1))
+            out_start = right + 11
+        else:
+            out_start = right
+        pygame.draw.line(screen, color, (out_start, mid), (x+w-2, mid), stroke)
 
     def _draw_logic_gates_page(self, screen, content):
         self.buttons = []
-
-        title = self._fit_text(
-            "LOGIC GATES", content.width, 22, INK
-        )
+        title = self._fit_text("LOGIC GATES", content.width, 22, INK)
         screen.blit(title, (content.x + 3, content.y + 2))
+        pygame.draw.line(screen, PAGE_LINE,
+                         (content.x + 2, content.y + 35),
+                         (content.right - 2, content.y + 35), 2)
+        self._text(screen, "TYPES OF GATES AVAILABLE FOR 2 INPUTS:",
+                   content.x + 3, content.y + 44, INK, self.body_font)
 
-        pygame.draw.line(
-            screen, PAGE_LINE,
-            (content.x + 2, content.y + 35),
-            (content.right - 2, content.y + 35),
-            2,
-        )
-
-        self._text(
-            screen,
-            "Select a gate, then change inputs A and B.",
-            content.x + 3, content.y + 45, INK, self.small_font,
-        )
-
-        # Six selectable gate buttons arranged in two rows.
-        columns = 3
-        gap_x = 10
-        gap_y = 9
-        button_w = (content.width - 6 - gap_x * 2) // columns
-        button_h = 35
-        start_x = content.x + 3
-        start_y = content.y + 75
-
+        # Four columns over two rows: all seven reference symbols stay visible.
+        # NOT is a one-input gate, included alongside the six two-input gates.
+        columns, gap_x, gap_y = 4, 8, 7
+        button_w = (content.width - 6 - gap_x * (columns - 1)) // columns
+        button_h = 49
+        start_x, start_y = content.x + 3, content.y + 70
         for index, gate in enumerate(self.gate_names):
-            row = index // columns
-            col = index % columns
-
-            rect = pygame.Rect(
-                start_x + col * (button_w + gap_x),
-                start_y + row * (button_h + gap_y),
-                button_w,
-                button_h,
-            )
-
+            row, col = divmod(index, columns)
+            rect = pygame.Rect(start_x + col*(button_w+gap_x),
+                               start_y + row*(button_h+gap_y), button_w, button_h)
             selected = gate == self.selected_gate
-
-            self._draw_button(
-                screen, rect, gate, selected
-            )
-
+            pygame.draw.rect(screen, PAPER, rect)
+            pygame.draw.rect(screen, CYAN if selected else INK, rect, 3)
+            symbol_rect = pygame.Rect(rect.x+5, rect.y+2,
+                                      rect.width-10, 29)
+            self._draw_gate_symbol(screen, gate, symbol_rect,
+                                   CYAN if selected else INK)
+            label = self._fit_text(gate, rect.width-8, 12,
+                                   (0, 91, 103) if selected else INK)
+            screen.blit(label, label.get_rect(center=(rect.centerx, rect.bottom-9)))
             self.buttons.append((rect, ("gate", gate)))
 
-        controls_y = start_y + 2 * (button_h + gap_y) + 12
+        # Circuit begins below both rows of gate choices; no overlap with NOT.
+        circuit_y = start_y + 2*(button_h+gap_y) + 8
+        bottom_limit = self.back_button.y - 42
+        available_h = max(135, bottom_limit - circuit_y)
+        circuit_w = int(content.width * 0.63)
+        circuit_rect = pygame.Rect(content.x+3, circuit_y, circuit_w, available_h)
+        pygame.draw.rect(screen, (198, 202, 205), circuit_rect)
+        pygame.draw.rect(screen, PAGE_LINE, circuit_rect, 2)
 
-        self._text(
-            screen, "INPUT SWITCHES",
-            content.x + 3, controls_y, INK, self.body_font,
-        )
+        wire = (55, 125, 151)
+        cyan = CYAN
+        input_w = min(94, max(75, int(circuit_w * 0.19)))
+        input_h = 35
+        ax = circuit_rect.x + 14
+        ay = circuit_rect.y + int(available_h * 0.23)
+        by = circuit_rect.y + int(available_h * 0.64)
+        a_rect = pygame.Rect(ax, ay, input_w, input_h)
+        b_rect = pygame.Rect(ax, by, input_w, input_h)
 
-        switch_y = controls_y + 29
-        switch_w = (content.width - 16) // 2
-        switch_h = 43
-
-        a_rect = pygame.Rect(
-            content.x + 3, switch_y, switch_w, switch_h
-        )
-        b_rect = pygame.Rect(
-            content.x + 10 + switch_w, switch_y,
-            switch_w, switch_h
-        )
-
-        self._draw_button(
-            screen, a_rect, f"[A] INPUT: {self.gate_a}",
-            len(self.buttons) == self.selected_index,
-        )
+        # Put A/B values inside the actual circuit input blocks.
+        pygame.draw.rect(screen, (7, 27, 39), a_rect)
+        pygame.draw.rect(screen, cyan, a_rect, 3)
+        self._text(screen, f"A = {self.gate_a}", a_rect.x+8, a_rect.y+8,
+                   WHITE, self.body_font)
         self.buttons.append((a_rect, ("input_a", None)))
 
-        self._draw_button(
-            screen, b_rect, f"[B] INPUT: {self.gate_b}",
-            len(self.buttons) == self.selected_index,
-        )
-        self.buttons.append((b_rect, ("input_b", None)))
+        is_not = self.selected_gate == "NOT"
+        if not is_not:
+            pygame.draw.rect(screen, (7, 27, 39), b_rect)
+            pygame.draw.rect(screen, cyan, b_rect, 3)
+            self._text(screen, f"B = {self.gate_b}", b_rect.x+8, b_rect.y+8,
+                       WHITE, self.body_font)
+            self.buttons.append((b_rect, ("input_b", None)))
 
-        output = self._gate_output(
-            self.selected_gate, self.gate_a, self.gate_b
-        )
+        gate_x = circuit_rect.x + int(circuit_w * 0.43)
+        gate_y = circuit_rect.y + int(available_h * 0.31)
+        gate_w = max(68, int(circuit_w * 0.22))
+        gate_h = max(48, int(available_h * 0.38))
+        symbol_rect = pygame.Rect(gate_x, gate_y, gate_w, gate_h)
+        pin_mid = gate_y + gate_h // 2
 
-        output_y = switch_y + switch_h + 17
+        if is_not:
+            # Single input only; one wire and one input pin for NOT.
+            pygame.draw.lines(screen, wire, False,
+                              [(a_rect.right, a_rect.centery),
+                               (gate_x-15, a_rect.centery),
+                               (gate_x-15, pin_mid), (gate_x, pin_mid)], 5)
+            pygame.draw.rect(screen, cyan, (gate_x-4, pin_mid-4, 8, 8))
+        else:
+            pin1 = gate_y + gate_h // 3
+            pin2 = gate_y + (2 * gate_h) // 3
+            for input_rect, pin_y in ((a_rect, pin1), (b_rect, pin2)):
+                mid_x = gate_x - 15
+                pygame.draw.lines(screen, wire, False,
+                                  [(input_rect.right, input_rect.centery),
+                                   (mid_x, input_rect.centery),
+                                   (mid_x, pin_y), (gate_x, pin_y)], 5)
+                # Square connection pads at the input pins.
+                pygame.draw.rect(screen, cyan, (gate_x-4, pin_y-4, 8, 8))
 
-        self._text(
-            screen, f"SELECTED GATE: {self.selected_gate}",
-            content.x + 3, output_y, INK, self.body_font,
-        )
+        self._draw_gate_symbol(screen, self.selected_gate, symbol_rect, cyan)
+        output = self._gate_output(self.selected_gate, self.gate_a, self.gate_b)
+        lamp_x = circuit_rect.right - 31
+        lamp_y = circuit_rect.centery
+        out_start = gate_x + gate_w
+        pygame.draw.lines(screen, wire, False,
+                          [(out_start, pin_mid), (lamp_x-13, pin_mid),
+                           (lamp_x-13, lamp_y), (lamp_x-13, lamp_y)], 5)
+        pygame.draw.rect(screen, cyan, (out_start-4, pin_mid-4, 8, 8))
+        pygame.draw.circle(screen, (40, 205, 130) if output else (48, 42, 43),
+                           (lamp_x, lamp_y), 17)
+        pygame.draw.circle(screen, WHITE, (lamp_x, lamp_y), 18, 3)
+        self._text(screen, "OUTPUT", lamp_x-29, lamp_y+22, MUTED, self.small_font)
 
-        self._text(
-            screen, f"OUTPUT: {output}",
-            content.x + 3, output_y + 29, INK, self.body_font,
-        )
-
-        # Truth table
-        table_y = output_y + 68
-        self._text(
-            screen, "TRUTH TABLE",
-            content.x + 3, table_y, INK, self.body_font,
-        )
-
-        table_x = content.x + 3
-        table_y += 28
-        table_w = content.width - 6
-        col_w = table_w // 3
-        row_h = 30
-
-        headers = ["A", "B", "Y"]
-
-        for col, heading in enumerate(headers):
-            cell = pygame.Rect(
-                table_x + col * col_w, table_y, col_w, row_h
-            )
+        # Compact truth table: NOT has A/Y and exactly two rows.
+        table_x = circuit_rect.right + 13
+        table_w = content.right - table_x - 3
+        self._text(screen, "LIVE TRUTH TABLE", table_x, circuit_y+1,
+                   INK, self.small_font)
+        headers = ["A", "Y"] if is_not else ["A", "B", "Y"]
+        col_w = max(1, table_w // len(headers))
+        row_h = min(29, max(21, (available_h-32)//(3 if is_not else 5)))
+        table_top = circuit_y + 25
+        for col, head in enumerate(headers):
+            cell = pygame.Rect(table_x+col*col_w, table_top, col_w, row_h)
             pygame.draw.rect(screen, PAPER_LIGHT, cell)
             pygame.draw.rect(screen, PAGE_LINE, cell, 2)
+            self._text(screen, head, cell.x+4, cell.y+4, INK, self.small_font)
 
-            self._text(
-                screen, heading,
-                cell.x + 8, cell.y + 5, INK, self.small_font,
-            )
+        combos = [(0, None), (1, None)] if is_not else [(0,0),(0,1),(1,0),(1,1)]
+        for row, (a, b) in enumerate(combos):
+            yval = self._gate_output(self.selected_gate, a, 0 if b is None else b)
+            vals = [a, yval] if is_not else [a, b, yval]
+            active = (a == self.gate_a) if is_not else ((a,b) == (self.gate_a,self.gate_b))
+            for col, val in enumerate(vals):
+                cell = pygame.Rect(table_x+col*col_w,
+                                   table_top+(row+1)*row_h, col_w, row_h)
+                pygame.draw.rect(screen, (185, 224, 226) if active else PAPER, cell)
+                pygame.draw.rect(screen, CYAN if active else PAGE_LINE, cell,
+                                 2 if active else 1)
+                self._text(screen, str(val), cell.x+4, cell.y+4, INK, self.small_font)
 
-        for row, (a, b) in enumerate(
-            [(0, 0), (0, 1), (1, 0), (1, 1)]
-        ):
-            y_value = self._gate_output(self.selected_gate, a, b)
-            y = table_y + (row + 1) * row_h
-
-            values = [a, b, y_value]
-
-            for col, value in enumerate(values):
-                cell = pygame.Rect(
-                    table_x + col * col_w, y, col_w, row_h
-                )
-
-                pygame.draw.rect(screen, PAPER, cell)
-                pygame.draw.rect(screen, PAGE_LINE, cell, 1)
-
-                self._text(
-                    screen, str(value),
-                    cell.x + 8, cell.y + 5, INK, self.small_font,
-                )
-
-        self._text(
-            screen,
-            "Click the buttons or use UP/DOWN and ENTER.",
-            content.x + 3, table_y + 5 * row_h + 8,
-            MUTED, self.small_font,
-        )
-
+        summary_y = table_top + (len(combos)+1)*row_h + 7
+        self._text(screen, f"SELECTED: {self.selected_gate}", table_x,
+                   summary_y, INK, self.small_font)
+        self._text(screen, f"OUTPUT: {output}", table_x,
+                   summary_y+18, INK, self.small_font)
+        self._text(screen, "Click A box to toggle. [B] BACK" if is_not else
+                   "Click A/B boxes to toggle. [B] BACK",
+                   content.x+3, circuit_rect.bottom+2, MUTED, self.small_font)
         self._draw_back_button(screen)
 
 
