@@ -1,16 +1,21 @@
-
 # Level 3: Memory Protocol — Security Network
 # Uses the shared screen_borders.py monitor frame.
 #
-# Controls:
+# Four steps:
+#   1. PROBE     A/B/C/D probe the lamp and fill the notebook
+#   2. DIAGRAM   draw discovered transitions and find the shortest path
+#   3. EQUATIONS derive the sequence detector's Boolean next-state equations
+#   4. BUILD     wire and simulate the sequence detector
+#
+# Controls (PROBE):
 #   A / B / C / D = Probe the security system
 #   R             = Reset the lamp
 #   H             = Show a hint
-#   ENTER         = Return to the lab after completing the level
 
 import pygame
 from .base_puzzle import BasePuzzle
 from screen_borders import draw_pixel_monitor
+from puzzles.memory_protocol_circuits import MemoryProtocolCircuitMixin  # NEW
 
 
 # ---------------------------------------------------------
@@ -32,7 +37,8 @@ GREY = (132, 151, 174)
 YELLOW = (255, 195, 50)
 
 
-class MemoryProtocolPuzzle(BasePuzzle):
+# CHANGED: mixin goes first so its draw() is the one that runs
+class MemoryProtocolPuzzle(MemoryProtocolCircuitMixin, BasePuzzle):
     """Deduce the hidden security system using the state lamp."""
 
     MAX_TRIPS = 3
@@ -94,6 +100,8 @@ class MemoryProtocolPuzzle(BasePuzzle):
         self.hint_index = 0
         self.awaiting_exit_confirmation = False
 
+        self._init_circuits()   # NEW: keep this as the LAST line
+
     # ---------------------------------------------------------
     # GAME LOGIC
     # ---------------------------------------------------------
@@ -152,8 +160,8 @@ class MemoryProtocolPuzzle(BasePuzzle):
                 )
 
         elif next_state == "OPEN":
-            self.awaiting_exit_confirmation = True
-            self.message = "ACCESS GRANTED! SECURITY NETWORK UNLOCKED."
+            # CHANGED: no longer finishes the level. Go to step 2.
+            self.start_diagram_phase()
 
     def reset_lamp(self):
         if self.solved or self.awaiting_exit_confirmation:
@@ -173,10 +181,16 @@ class MemoryProtocolPuzzle(BasePuzzle):
         self.hint_index += 1
 
     def handle_event(self, event):
-        # Keyboard only. Mouse clicks are ignored.
+        # The later DIAGRAM, EQUATIONS, and BUILD steps handle their own events
+        # (including the mouse). This must come BEFORE the KEYDOWN filter.
+        if self.circuit_handle_event(event):
+            return
+
+        # PROBE step: keyboard only. Mouse clicks are ignored.
         if event.type != pygame.KEYDOWN:
             return
 
+        # Circuit verified: ENTER returns to the lab.
         if self.awaiting_exit_confirmation:
             if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                 self.solved = True
@@ -266,10 +280,10 @@ class MemoryProtocolPuzzle(BasePuzzle):
         )
 
     # ---------------------------------------------------------
-    # MAIN DRAW
+    # PROBE SCREEN (your original draw, renamed)
     # ---------------------------------------------------------
 
-    def draw(self, screen):
+    def _draw_probe(self, screen):          # CHANGED: was draw()
         screen.fill(DARK_BLUE)
 
         # Shared Level 1 pixel-art monitor border.
@@ -295,14 +309,12 @@ class MemoryProtocolPuzzle(BasePuzzle):
         intro_font = self._font(max(17, int(25 * scale)), True)
         title_font = self._font(max(14, int(19 * scale)), True)
 
-        # Slightly larger text inside the notes and notebook.
         notes_font = self._font(max(14, int(17 * scale)))
         notebook_font = self._font(max(14, int(17 * scale)))
 
         stat_font = self._font(max(14, int(17 * scale)), True)
         button_font = self._font(max(14, int(17 * scale)), True)
         message_font = self._font(max(13, int(16 * scale)), True)
-        completion_font = self._font(max(20, int(27 * scale)), True)
 
         # -----------------------------------------------------
         # BLINKING SECURITY ALERT
@@ -313,7 +325,7 @@ class MemoryProtocolPuzzle(BasePuzzle):
 
         self._text(
             screen,
-            "■ SECURITY NETWORK // LEVEL THREE",
+            "■ SECURITY NETWORK // LEVEL THREE // STEP 1 OF 4",
             alert_font,
             alert_colour,
             X(35), Y(25)
@@ -335,11 +347,9 @@ class MemoryProtocolPuzzle(BasePuzzle):
         )
 
         # -----------------------------------------------------
-        # ENLARGED, MATCHING NOTES AND NOTEBOOK PANELS
+        # NOTES AND NOTEBOOK PANELS
         # -----------------------------------------------------
 
-        # Both panels have exactly the same height.
-        # The extra height makes room for the H-key tip and line spacing.
         panel_top = Y(155)
         panel_height = H(350)
 
@@ -353,7 +363,6 @@ class MemoryProtocolPuzzle(BasePuzzle):
         self._panel(screen, notes_rect, "GUARD'S NOTES", title_font)
         self._panel(screen, notebook_rect, "YOUR NOTEBOOK", title_font)
 
-        # Guard's notes: larger type and additional space between points.
         notes_x = notes_rect.x + W(16)
         notes_y = notes_rect.y + H(49)
         notes_width = notes_rect.width - W(32)
@@ -376,7 +385,6 @@ class MemoryProtocolPuzzle(BasePuzzle):
 
             notes_y += used + note_gap
 
-        # Notebook entries: matching panel height, larger type and spacing.
         book_x = notebook_rect.x + W(16)
         book_y = notebook_rect.y + H(51)
         book_width = notebook_rect.width - W(32)
@@ -419,7 +427,6 @@ class MemoryProtocolPuzzle(BasePuzzle):
         if pulsing and (pygame.time.get_ticks() // 350) % 2:
             colour = tuple(int(c * 0.35) for c in colour)
 
-        # Enlarged lamp circle.
         lamp_center = (X(175), Y(615))
         lamp_radius = max(31, int(55 * scale))
 
@@ -452,7 +459,6 @@ class MemoryProtocolPuzzle(BasePuzzle):
             notes_font, GREY, stats_x, stats_y + stat_gap * 3
         )
 
-        # Reset label — keyboard control is R.
         reset_rect = pygame.Rect(
             X(1000), Y(550), W(330), H(58)
         )
@@ -470,7 +476,6 @@ class MemoryProtocolPuzzle(BasePuzzle):
         # KEYPAD
         # -----------------------------------------------------
 
-        # Kept above the status area to prevent overlap.
         keypad_y = Y(690)
         keypad_h = H(57)
         keypad_left = X(35)
@@ -492,49 +497,23 @@ class MemoryProtocolPuzzle(BasePuzzle):
             pygame.draw.rect(screen, PANEL_BLUE, rect)
             pygame.draw.rect(screen, CYAN, rect, 3)
 
-            # Only BUTTON A, BUTTON B, BUTTON C, BUTTON D.
             label = button_font.render(f"BUTTON {letter}", True, CYAN)
             screen.blit(label, label.get_rect(center=rect.center))
 
         # -----------------------------------------------------
-        # STATUS AND COMPLETION MESSAGE
+        # STATUS MESSAGE
         # -----------------------------------------------------
 
-        # Reserved area below the keypad, still inside the monitor.
         status_x = X(35)
         status_y = Y(765)
         status_width = W(1330)
         status_height = H(95)
 
-        if self.awaiting_exit_confirmation:
-            completion_rect = pygame.Rect(
-                status_x, status_y,
-                status_width, status_height
-            )
-            pygame.draw.rect(screen, DARK_BLUE, completion_rect)
+        self._wrapped_text(
+            screen, self.message, message_font, YELLOW,
+            status_x, status_y,
+            status_width, H(23), status_height
+        )
 
-            self._text(
-                screen, "ACCESS GRANTED!",
-                completion_font, GREEN,
-                status_x, status_y
-            )
-
-            self._text(
-                screen, "YOU CRACKED THE SECURITY NETWORK, DETECTIVE!",
-                message_font, WHITE,
-                status_x, status_y + H(33)
-            )
-
-            self._text(
-                screen, "PRESS ENTER TO RETURN TO THE LAB",
-                message_font, YELLOW,
-                status_x, status_y + H(63)
-            )
-        else:
-            self._wrapped_text(
-                screen, self.message, message_font, YELLOW,
-                status_x, status_y,
-                status_width, H(23), status_height
-            )
-
-        pygame.display.update()
+        # CHANGED: pygame.display.update() removed.
+        # The "ACCESS GRANTED" screen now lives in the BUILD step.

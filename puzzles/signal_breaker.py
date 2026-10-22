@@ -21,6 +21,8 @@
 import pygame
 
 from .base_puzzle import BasePuzzle
+from .signal_breaker_circuits import SignalBreakerCircuitMixin
+
 from screen_borders import draw_pixel_monitor
 
 
@@ -56,7 +58,7 @@ def lfsr_stream(seed, taps, count):
     return output
 
 
-class SignalBreakerPuzzle(BasePuzzle):
+class SignalBreakerPuzzle(SignalBreakerCircuitMixin, BasePuzzle):
     """Crack the hidden LFSR and recover the intercepted transmission."""
 
     SECRET = "K7"
@@ -103,6 +105,7 @@ class SignalBreakerPuzzle(BasePuzzle):
         self.taps = set()
         self.hint_index = 0
         self.transmission_complete = False
+        self._init_circuits()
         self.restart(
             "Detective, set the seed, choose two taps, and pulse the clock."
         )
@@ -427,10 +430,11 @@ class SignalBreakerPuzzle(BasePuzzle):
     # --------------------------------------------------------
 
     def handle_event(self, event):
+        if self.circuit_handle_event(event): return
         if event.type == pygame.KEYDOWN:
             if self.transmission_complete:
                 if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                    self.solved = True
+                    self.start_build_phase()
                 return
 
             if event.key == pygame.K_SPACE:
@@ -481,6 +485,7 @@ class SignalBreakerPuzzle(BasePuzzle):
     # --------------------------------------------------------
 
     def draw(self, screen):
+        if self.phase == "BUILD": self._draw_build(screen); return
         screen.fill(BG)
         monitor_panel = draw_pixel_monitor(screen)
         layout = self._layout(screen)
@@ -790,7 +795,7 @@ class SignalBreakerPuzzle(BasePuzzle):
         if self.transmission_complete:
             # Keep the recovered transmission and Enter prompt on ONE line so
             # they sit side by side instead of colliding in short message boxes.
-            final_text = f'RECOVERED: "{self.decoded_text()}"   |   PRESS ENTER TO RETURN TO THE LAB'
+            final_text = f'RECOVERED: "{self.decoded_text()}"   |   PRESS ENTER TO BUILD THE MACHINE'
             final_font = self._fit_font(
                 final_text, message_box.width - 16, max(8, int(11 * scale))
             )

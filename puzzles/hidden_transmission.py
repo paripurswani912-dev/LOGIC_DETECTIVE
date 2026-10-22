@@ -1,13 +1,13 @@
-
 # puzzles/hidden_transmission.py
 # Level 2: Hidden Transmission — Pixel-Art Computer Interface
 
 import pygame
 import settings
 from puzzles.base_puzzle import BasePuzzle
+from puzzles.hidden_transmission_circuits import HiddenTransmissionCircuitMixin
 
 
-class HiddenTransmissionPuzzle(BasePuzzle):
+class HiddenTransmissionPuzzle(HiddenTransmissionCircuitMixin, BasePuzzle):
 
     def __init__(self):
         super().__init__()
@@ -116,6 +116,9 @@ class HiddenTransmissionPuzzle(BasePuzzle):
 
         self.screen_black = (4, 10, 22)
         self.screen_edge = (39, 91, 113)
+
+        # Build phase (circuit workbench)
+        self._init_circuits()
 
     def _make_font(self, size):
         return pygame.font.SysFont(
@@ -243,6 +246,11 @@ class HiddenTransmissionPuzzle(BasePuzzle):
     # ---------------------------------------------------------
 
     def handle_event(self, event):
+        # Build phase: the circuit workbench gets first pick
+        # (mouse events included).
+        if self.circuit_handle_event(event):
+            return
+
         if event.type != pygame.KEYDOWN:
             return
 
@@ -288,13 +296,10 @@ class HiddenTransmissionPuzzle(BasePuzzle):
             self.user_input = ""
             return
 
-        # Final answer: show the blinking victory message first.
+        # Final answer: move on to the circuit BUILD phase.
         if self.current_question == len(self.questions) - 1:
-            self.awaiting_exit_confirmation = True
-            self.message = "YOU DECODED THEM ALL, DETECTIVE!"
-            self.message_color = self.yellow
             self.user_input = ""
-            self.elapsed_time = 0.0
+            self.start_build_phase()
             return
 
         # Correct answer: advance to the next transmission.
@@ -312,6 +317,11 @@ class HiddenTransmissionPuzzle(BasePuzzle):
 
     def draw(self, screen):
         screen.fill((5, 7, 17))
+
+        # Build phase has its own screen (until the final success screen).
+        if self.phase == "BUILD" and not self.solved:
+            self._draw_build(screen)
+            return
 
         width, height = screen.get_size()
         center_x = width // 2
@@ -616,3 +626,4 @@ class HiddenTransmissionPuzzle(BasePuzzle):
         self.message = ""
         self.message_color = self.green
         self.awaiting_exit_confirmation = False
+        self._init_circuits()

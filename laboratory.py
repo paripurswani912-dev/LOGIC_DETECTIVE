@@ -78,6 +78,7 @@ class Laboratory:
             (218, 575),
             (783, 575),
         ]
+    
 
         self.label_font = pygame.font.Font(None, 24)
         self.status_font = pygame.font.Font(None, 17)
