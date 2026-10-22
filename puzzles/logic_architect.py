@@ -3,17 +3,21 @@
 # overlapping groups, and horizontal/vertical grouping only.
 # Only maximal (prime) groups are accepted, and the final answer
 # must use the minimum number of groups.
+#
+# Phases: FILL (rebuild the K-map) -> GROUP (simplify)
+#         -> BUILD (wire the simplified expression as a circuit)
 
 import itertools
 import pygame
 import settings
 
 from .base_puzzle import BasePuzzle
+from .logic_architect_circuits import LogicArchitectCircuitMixin
 from screen_borders import draw_pixel_monitor
 
 
-class LogicArchitectPuzzle(BasePuzzle):
-    """Reconstruct the vault alarm K-map, then simplify it."""
+class LogicArchitectPuzzle(LogicArchitectCircuitMixin, BasePuzzle):
+    """Reconstruct the vault alarm K-map, simplify it, then build it."""
 
     GRAY = [0, 1, 3, 2]
     LABELS = ["00", "01", "11", "10"]
@@ -86,6 +90,9 @@ class LogicArchitectPuzzle(BasePuzzle):
         self.all_groups = self.build_rects()
         self.primes = self.find_maximal_groups()
         self.min_cover = self.compute_min_cover()
+
+        # NEW: circuit BUILD phase state
+        self._init_circuits()
 
     # ------------------------------------------------------------
     # K-map logic
@@ -281,11 +288,13 @@ class LogicArchitectPuzzle(BasePuzzle):
             )
             return
 
-        # Keep the generated expression; no sector key is displayed.
         terms = sorted(set(self.term_for(group) for group in self.groups))
 
-        self.awaiting_return = True
-        self.message = f"F = {' + '.join(terms)}"
+        # CHANGED: the level is no longer finished here. Save the
+        # simplified expression and move on to the BUILD phase.
+        self.final_expr = "F = " + " + ".join(terms)
+        self.message = self.final_expr
+        self.start_build_phase()
 
     def reset_attempt(self):
         super().reset_attempt()
@@ -304,11 +313,20 @@ class LogicArchitectPuzzle(BasePuzzle):
         self.last_click_time = 0
         self.last_click_cell = None
 
+        # NEW: fresh build board
+        self._init_circuits()
+
     # ------------------------------------------------------------
     # Mouse and keyboard controls
     # ------------------------------------------------------------
 
     def handle_event(self, event):
+        # NEW: the BUILD phase (keyboard + mouse) is handled by the
+        # mixin. It returns False in the other phases and once the
+        # circuit is verified (awaiting_return).
+        if self.circuit_handle_event(event):
+            return
+
         if self.awaiting_return:
             if (
                 event.type == pygame.KEYDOWN
@@ -483,9 +501,11 @@ class LogicArchitectPuzzle(BasePuzzle):
 
     # ------------------------------------------------------------
     # Draw screen
+    # (renamed from draw -> _draw_map; the mixin's draw() picks the
+    #  K-map screen or the BUILD screen)
     # ------------------------------------------------------------
 
-    def draw(self, screen):
+    def _draw_map(self, screen):
         screen.fill(settings.BLACK)
 
         # Shared pixel-art monitor frame.
@@ -990,116 +1010,32 @@ class LogicArchitectPuzzle(BasePuzzle):
             )
 
         # --------------------------------------------------------
-        # Feedback and completion footer
+        # Feedback footer
+        # (the victory screen now lives in the BUILD phase)
         # --------------------------------------------------------
 
         footer_top = panel.bottom - int(ph * 0.115)
 
-        if self.awaiting_return:
-            # Keep the Boolean expression on its own line below
-            # "Groups saved" and above the orange victory message.
-            expression_y = groups_y + body_font.get_height() + 12
+        message_font = self.fit_font(
+            self.message,
+            small_size,
+            content_width,
+        )
 
-            victory_text = (
-                "NOTHING ESCAPES YOUR LOGIC, DETECTIVE. VAULT UNLOCKED!"
-            )
+        message_y = min(
+            panel.bottom - 20,
+            max(
+                groups_y + small_font.get_height() + 4,
+                footer_top,
+            ),
+        )
 
-            victory_font = self.fit_font(
-                victory_text,
-                max(18, min(25, int(pw * 0.020))),
-                content_width,
-            )
-
-            victory_y = panel.bottom - int(ph * 0.075)
-
-            # Keep the expression below the group count and above victory.
-            # If the available area is tight, use a smaller font rather
-            # than allowing the lines to collide.
-            expression_font = self.fit_font(
-                self.message,
-                small_size,
-                content_width,
-            )
-
-            max_expression_y = (
-                victory_y
-                - victory_font.get_height() // 2
-                - expression_font.get_height() // 2
-                - 12
-            )
-
-            expression_y = min(expression_y, max_expression_y)
-
-            if self.message.startswith("F = "):
-                self.draw_centered(
-                    screen,
-                    self.message,
-                    expression_font,
-                    settings.GREEN,
-                    center_x,
-                    expression_y,
-                    content_width,
-                )
-
-            # Blinking orange completion line. Its original placement
-            # is retained so it remains separate from the return prompt.
-            blink_visible = (pygame.time.get_ticks() // 500) % 2 == 0
-
-            if blink_visible:
-                self.draw_centered(
-                    screen,
-                    victory_text,
-                    victory_font,
-                    self.ORANGE,
-                    center_x,
-                    victory_y,
-                    content_width,
-                )
-
-            # Static grey return prompt, separated from the victory line.
-            return_text = "PRESS ENTER TO RETURN TO THE LAB"
-            return_font = self.fit_font(
-                return_text,
-                small_size,
-                content_width,
-            )
-
-            return_y = min(
-                panel.bottom - 18,
-                victory_y + max(24, victory_font.get_height() + 9),
-            )
-
-            self.draw_centered(
-                screen,
-                return_text,
-                return_font,
-                settings.GREY,
-                center_x,
-                return_y,
-                content_width,
-            )
-
-        else:
-            message_font = self.fit_font(
-                self.message,
-                small_size,
-                content_width,
-            )
-
-            message_y = min(
-                panel.bottom - 20,
-                max(
-                    groups_y + small_font.get_height() + 4,
-                    footer_top,
-                ),
-            )
-
-            self.draw_centered(
-                screen,
-                self.message,
-                message_font,
-                settings.YELLOW,
-                center_x,
-                message_y,
-                content_width,
-            )
+        self.draw_centered(
+            screen,
+            self.message,
+            message_font,
+            settings.YELLOW,
+            center_x,
+            message_y,
+            content_width,
+        )

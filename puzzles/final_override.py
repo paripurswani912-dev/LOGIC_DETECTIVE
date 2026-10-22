@@ -1,13 +1,14 @@
-
 import pygame
 import settings
 
 from puzzles.base_puzzle import BasePuzzle
+from puzzles.final_override_circuits import FinalOverrideCircuitMixin
 from screen_borders import draw_pixel_monitor
 
 
-class FinalOverridePuzzle(BasePuzzle):
-    """Level 4: Evaluate a Boolean expression before time runs out."""
+class FinalOverridePuzzle(FinalOverrideCircuitMixin, BasePuzzle):
+    """Level 4: Evaluate a Boolean expression before time runs out,
+    then identify the simplified form and build it as a circuit."""
 
     def __init__(self):
         super().__init__()
@@ -40,6 +41,9 @@ class FinalOverridePuzzle(BasePuzzle):
         self.input_rects = {}
         self.submit_rect = pygame.Rect(0, 0, 0, 0)
         self.expression_rect = pygame.Rect(0, 0, 0, 0)
+
+        # NEW: SOLVE -> IDENTIFY -> BUILD state
+        self._init_circuits()
 
     # ---------------------------------------------------------------
     # Logic
@@ -79,9 +83,11 @@ class FinalOverridePuzzle(BasePuzzle):
         self.output_value = self.calculate_output()
 
         if self.output_value == 1:
-            self.awaiting_return = True
+            # CHANGED: no longer finishes the level. The timed SOLVE step
+            # is over, so move on to IDENTIFY (then BUILD).
             self.message = "OVERRIDE ACCEPTED!"
             self.message_color = settings.GREEN
+            self.start_identify_phase()
         else:
             self.message = (
                 "ACCESS DENIED! Output is 0. "
@@ -108,11 +114,20 @@ class FinalOverridePuzzle(BasePuzzle):
         self.message = "Set A, B, C and D, then submit your answer."
         self.message_color = settings.WHITE
 
+        # NEW: back to the SOLVE phase with a fresh build board
+        self._init_circuits()
+
     # ---------------------------------------------------------------
     # Keyboard controls
     # ---------------------------------------------------------------
 
     def handle_event(self, event):
+        # NEW: IDENTIFY and BUILD phases (keyboard + mouse) are handled
+        # by the mixin. It returns False during SOLVE, when the level
+        # has failed, or once the build is verified (awaiting_return).
+        if self.circuit_handle_event(event):
+            return
+
         if event.type != pygame.KEYDOWN:
             return
 
@@ -152,7 +167,13 @@ class FinalOverridePuzzle(BasePuzzle):
     # ---------------------------------------------------------------
 
     def update(self, dt):
-        if self.failed or self.awaiting_return or self.solved:
+        # CHANGED: the timer only runs during the SOLVE phase.
+        if (
+            self.phase != "SOLVE"
+            or self.failed
+            or self.awaiting_return
+            or self.solved
+        ):
             return
 
         self.time_left -= dt
@@ -220,9 +241,11 @@ class FinalOverridePuzzle(BasePuzzle):
 
     # ---------------------------------------------------------------
     # Draw screen
+    # (renamed from draw -> _draw_solve; the mixin's draw() picks the
+    #  right screen for SOLVE / IDENTIFY / BUILD)
     # ---------------------------------------------------------------
 
-    def draw(self, screen):
+    def _draw_solve(self, screen):
         screen.fill(settings.BLACK)
 
         # Shared monitor frame: keep the border consistent with Levels 1–3.
@@ -238,14 +261,13 @@ class FinalOverridePuzzle(BasePuzzle):
 
         # -----------------------------------------------------------
         # Blinking security alert
-        # The square and text share the same blink timing and color.
         # -----------------------------------------------------------
 
         alert_y = panel.y + int(panel.height * 0.045)
         alert_visible = (pygame.time.get_ticks() // 500) % 2 == 0
 
         if alert_visible:
-            alert_text = "SECURITY NETWORK // LEVEL FOUR"
+            alert_text = "SECURITY NETWORK // LEVEL FOUR // STEP 1 OF 3"
             alert_font = self.fit_font(
                 alert_text,
                 max(18, int(panel.width * 0.018)),
@@ -258,7 +280,6 @@ class FinalOverridePuzzle(BasePuzzle):
                 settings.RED,
             )
 
-            # Vertically align the square with the actual text height.
             square_size = max(12, min(16, int(alert_surface.get_height() * 0.62)))
             square_x = content_left + 3
             square_y = alert_y + (
@@ -342,7 +363,6 @@ class FinalOverridePuzzle(BasePuzzle):
             max_width=content_width,
         )
 
-        # Keyboard instructions remain outside the main expression box.
         controls_text = (
             "A/B/C/D: Toggle inputs   |   ENTER: Submit your answer"
         )
@@ -395,7 +415,6 @@ class FinalOverridePuzzle(BasePuzzle):
             border_radius=18,
         )
 
-        # Expression
         expression = "Y = NOT ((A OR B) AND (C XOR D))"
         expression_y = box.y + int(box.height * 0.075)
 
@@ -415,7 +434,6 @@ class FinalOverridePuzzle(BasePuzzle):
             max_width=box.width - 40,
         )
 
-        # Reminder beneath the expression.
         remember = "Remember: XOR is 1 only when its inputs differ."
         remember_y = box.y + int(box.height * 0.16)
 
@@ -576,7 +594,7 @@ class FinalOverridePuzzle(BasePuzzle):
             )
 
         # -----------------------------------------------------------
-        # Submit button / accepted state
+        # Submit button
         # -----------------------------------------------------------
 
         button_w = min(
@@ -598,14 +616,9 @@ class FinalOverridePuzzle(BasePuzzle):
             button_h,
         )
 
-        if self.awaiting_return:
-            button_color = settings.GREEN
-            button_label = "ACCEPTED"
-            button_text_color = settings.BLACK
-        else:
-            button_color = settings.CYAN
-            button_label = "SUBMIT [ENTER]"
-            button_text_color = settings.BLACK
+        button_color = settings.CYAN
+        button_label = "SUBMIT [ENTER]"
+        button_text_color = settings.BLACK
 
         outer_rect = self.submit_rect.inflate(10, 10)
 
@@ -618,7 +631,7 @@ class FinalOverridePuzzle(BasePuzzle):
 
         pygame.draw.rect(
             screen,
-            settings.CYAN if not self.awaiting_return else settings.GREEN,
+            settings.CYAN,
             outer_rect,
             width=2,
             border_radius=14,
@@ -682,61 +695,6 @@ class FinalOverridePuzzle(BasePuzzle):
                 self.small_font,
                 settings.YELLOW,
                 (box.centerx, retry_y),
-                center=True,
-                max_width=box.width - 36,
-            )
-
-        elif self.awaiting_return:
-            success_y = self.submit_rect.bottom + max(
-                22, int(box.height * 0.055)
-            )
-
-            return_y = success_y + max(
-                30, int(box.height * 0.065)
-            )
-
-            return_limit = box.bottom - 20
-
-            if return_y > return_limit:
-                success_y = box.bottom - int(box.height * 0.13)
-                return_y = box.bottom - int(box.height * 0.065)
-
-            # Blink the success message in orange.
-            success_visible = (
-                pygame.time.get_ticks() // 500
-            ) % 2 == 0
-
-            success_text = "YOU WERE FAST, DETECTIVE!"
-            success_font = self.fit_font(
-                success_text,
-                max(24, int(box.width * 0.027)),
-                box.width - 36,
-            )
-
-            if success_visible:
-                self.draw_text(
-                    screen,
-                    success_text,
-                    success_font,
-                    settings.YELLOW,
-                    (box.centerx, success_y),
-                    center=True,
-                    max_width=box.width - 36,
-                )
-
-            return_text = "PRESS ENTER AGAIN TO RETURN TO THE LAB"
-            return_font = self.fit_font(
-                return_text,
-                max(17, int(box.width * 0.019)),
-                box.width - 36,
-            )
-
-            self.draw_text(
-                screen,
-                return_text,
-                return_font,
-                settings.YELLOW,
-                (box.centerx, return_y),
                 center=True,
                 max_width=box.width - 36,
             )

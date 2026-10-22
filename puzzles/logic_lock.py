@@ -1,12 +1,13 @@
-
 # puzzles/logic_lock.py
 # Level 1: Logic Lock — Pixel-Art Computer Interface
 
 import pygame
 from puzzles.base_puzzle import BasePuzzle
+from puzzles.logic_lock_circuits import LogicLockCircuitMixin  # CHANGED
 
 
-class LogicLockPuzzle(BasePuzzle):
+# CHANGED: the mixin comes BEFORE BasePuzzle
+class LogicLockPuzzle(LogicLockCircuitMixin, BasePuzzle):
 
     def __init__(self):
         super().__init__()
@@ -52,6 +53,9 @@ class LogicLockPuzzle(BasePuzzle):
         self.font = self._make_font(17)
         self.small_font = self._make_font(14)
         self.title_font = self._make_font(25)
+
+        # CHANGED: must stay LAST, after fonts and elapsed_time exist.
+        self._init_circuits()
 
     def _make_font(self, size):
         return pygame.font.SysFont(
@@ -176,6 +180,10 @@ class LogicLockPuzzle(BasePuzzle):
     # ---------------------------------------------------------
 
     def handle_event(self, event):
+        # CHANGED: the Gate Lab and BUILD phase get the event first.
+        if self.circuit_handle_event(event):
+            return
+
         if event.type != pygame.KEYDOWN:
             return
 
@@ -229,31 +237,28 @@ class LogicLockPuzzle(BasePuzzle):
             self.selected_gate = "OR"
 
     # ---------------------------------------------------------
-    # CHECK THE CIRCUIT
+    # CHECK THE ANSWER (analysis step)
     # ---------------------------------------------------------
 
     def check_answer(self):
-        self.submitted = True
-        self.alarm_activated = False
-
         correct_outputs = [0, 0, 0, 1]
         entered_outputs = [
             row["answer"] for row in self.truth_table
         ]
 
-        # Correct answer: keep the interface open.
-        # The second Enter will exit the puzzle.
+        # CHANGED: a correct answer now unlocks the BUILD phase.
+        # The alarm is activated only after the built circuit is
+        # verified (see verify_build in logic_lock_circuits.py).
         if (
             self.selected_gate == "AND"
             and entered_outputs == correct_outputs
         ):
-            self.alarm_activated = True
-            self.awaiting_exit_confirmation = True
-            self.message = "ALARM HAS BEEN ACTIVATED!"
-            self.feedback_color = (255, 220, 65)
+            self.start_build_phase()
             return
 
         # Incorrect answer: alarm stays deactivated.
+        self.submitted = True
+        self.alarm_activated = False
         self.message = "ALARM IS STILL IN DEACTIVATED MODE!"
         self.feedback_color = (255, 220, 65)
 
@@ -268,10 +273,12 @@ class LogicLockPuzzle(BasePuzzle):
         self.elapsed_time += dt
 
     # ---------------------------------------------------------
-    # DRAW INTERFACE
+    # DRAW: ANALYSIS SCREEN
+    # CHANGED: renamed from draw() to _draw_analyze(). The mixin's
+    # draw() now chooses between this, the Gate Lab and BUILD.
     # ---------------------------------------------------------
 
-    def draw(self, screen):
+    def _draw_analyze(self, screen):
         screen.fill((5, 7, 17))
 
         width, height = screen.get_size()
@@ -319,8 +326,6 @@ class LogicLockPuzzle(BasePuzzle):
         y += 36
 
         # 3. Single-line challenge.
-        # Keep instructions readable without pushing the truth table
-        # into the result-message area.
         instruction_lines = [
             "Input A: Smoke sensor detects smoke.",
             "Input B: Security system is armed.",
@@ -354,7 +359,9 @@ class LogicLockPuzzle(BasePuzzle):
         controls = [
             "KEYS 1-4: Select row number",
             "LEFT ARROW KEY / RIGHT ARROW KEY: Set output to '0' OR '1'",
-            "A: AND Gate | O: OR Gate",
+            # CHANGED: P added on the same line, so the layout
+            # doesn't move.
+            "A: AND Gate | O: OR Gate | P: Gate Lab (optional)",
             "ENTER: Verify the circuit",
         ]
 
@@ -442,7 +449,6 @@ class LogicLockPuzzle(BasePuzzle):
         )
         y += 25
 
-        # Wider table, but keep a margin on the right.
         table_width = int(content_width * 0.92)
         col_widths = [
             int(table_width * 0.27),
@@ -461,7 +467,6 @@ class LogicLockPuzzle(BasePuzzle):
         header_height = 25
         row_height = 29
 
-        # Header cells and borders.
         for col, label in enumerate(headers):
             cell = pygame.Rect(
                 col_x[col], y,
@@ -489,7 +494,6 @@ class LogicLockPuzzle(BasePuzzle):
 
         y += header_height
 
-        # Body cells with complete grid lines.
         for index, row in enumerate(self.truth_table):
             values = [
                 str(index + 1),
@@ -547,28 +551,19 @@ class LogicLockPuzzle(BasePuzzle):
 
             y += row_height
 
-        # 7. Alarm result. It remains visible after the first
-        # Enter on success, until the second Enter exits.
-        if self.submitted:
-            status_text = (
-                "ALARM HAS BEEN ACTIVATED!"
-                if self.alarm_activated
-                else "ALARM IS STILL IN DEACTIVATED MODE!"
-            )
-
+        # 7. Result message. (Only a WRONG answer shows here now,
+        # because a correct one moves on to the BUILD screen.)
+        if self.submitted and not self.alarm_activated:
             status_surface = self._fit_text(
-                status_text,
+                "ALARM IS STILL IN DEACTIVATED MODE!",
                 content_width,
                 15,
                 (255, 220, 65),
             )
 
             status_y = y + 9
-            status_height = status_surface.get_height()
-
-            # Keep the status completely inside the screen panel.
             max_status_y = (
-                panel.bottom - status_height - 12
+                panel.bottom - status_surface.get_height() - 12
             )
             status_y = min(status_y, max_status_y)
 
@@ -577,26 +572,6 @@ class LogicLockPuzzle(BasePuzzle):
                     status_surface,
                     (left, status_y)
                 )
-
-        # Show the confirmation hint after successful activation.
-        if self.awaiting_exit_confirmation:
-            hint = self._fit_text(
-                "PRESS ENTER AGAIN TO CONTINUE",
-                content_width,
-                12,
-                (190, 207, 226),
-            )
-
-            hint_y = panel.bottom - hint.get_height() - 8
-
-            # Avoid drawing the hint on top of the alarm status.
-            if self.submitted:
-                hint_y = max(
-                    hint_y,
-                    min(y + 29, panel.bottom - hint.get_height() - 8)
-                )
-
-            screen.blit(hint, (left, hint_y))
 
     # ---------------------------------------------------------
     # RESET
@@ -619,3 +594,5 @@ class LogicLockPuzzle(BasePuzzle):
         self.elapsed_time = 0.0
         self.message = ""
         self.feedback_color = (255, 220, 65)
+
+        self._init_circuits()  # CHANGED: back to ANALYZE phase

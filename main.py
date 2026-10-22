@@ -6,8 +6,7 @@ import settings
 import pygame
 import os
 
-
-
+from notebook import DetectiveNotebook
 from game_state import GameState
 from player import Player
 from laboratory import Laboratory
@@ -20,6 +19,7 @@ from puzzles.memory_protocol import MemoryProtocolPuzzle
 from puzzles.final_override import FinalOverridePuzzle
 from puzzles.logic_architect import LogicArchitectPuzzle
 from puzzles.signal_breaker import SignalBreakerPuzzle
+
 
 
 def draw_centered_text(screen, font, text, color, y):
@@ -878,7 +878,7 @@ def update_fireworks(fireworks):
 
 def main():
     pygame.init()
-
+    notebook = DetectiveNotebook()
     screen = pygame.display.set_mode(
         (
             settings.SCREEN_WIDTH,
@@ -914,8 +914,22 @@ def main():
         )
 
         for event in pygame.event.get():
+
+            # Always allow the window to close, even while the notebook is open.
             if event.type == pygame.QUIT:
                 running = False
+                continue
+
+            # N toggles the notebook in the title screen, laboratory,
+            # puzzle rooms, and ending screen.
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_n:
+                notebook.toggle()
+                continue
+
+            # While the notebook is open, it consumes the remaining events
+            # so controls do not activate the game underneath it.
+            if notebook.open:
+                notebook.handle_event(event)
                 continue
 
             mode = game_state.current_mode
@@ -1129,6 +1143,11 @@ def main():
                 normal_font,
                 fireworks,
             )
+
+        # Draw the notebook AFTER the current game scene so its translucent
+        # overlay and page appear in every game mode, not only at the ending.
+        if notebook.open:
+            notebook.draw(screen)
 
         pygame.display.flip()
 
