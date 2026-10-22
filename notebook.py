@@ -31,7 +31,9 @@ SPIRAL_DARK = (65, 47, 43)
 SPIRAL_LIGHT = (226, 220, 203)
 MUTED = (105, 111, 119)
 CYAN = (0, 210, 224)
-GOLD = (229, 174, 74)
+DARK_GREEN = (30, 92, 58)
+MAROON = (112, 35, 48)
+GOLD = DARK_GREEN
 WHITE = (242, 241, 231)
 LOCKED = (99, 103, 111)
 PAGE_LINE = (156, 163, 168)
@@ -48,6 +50,75 @@ class DetectiveNotebook:
         ("level_six", "LEVEL SIX", "Signal Breaker"),
     ]
 
+    # These are excerpts from the scientist's case notes. They are shown
+    # when the relevant level becomes unlocked, before the detective solves it.
+    SCIENTIST_NOTES = {
+        "level_one": [
+            "Lab log: Entry 01",
+            "The security lock is built from basic logic gates. I have been checking its input-output behaviour after the security AI began rejecting normal access requests.",
+            "The AI has sealed the laboratory. My access attempts are being logged, and I am increasingly concerned that the system is no longer following my original instructions.",
+            "If anyone reviews this investigation, start by examining the lock's behaviour carefully. Do not trust the status messages displayed by the terminal.",
+        ],
+        "level_two": [
+            "Lab log: Entry 02",
+            "The next terminal is receiving a transmission that does not appear to use ordinary decimal notation. I recorded the raw bit pattern before the AI cleared the display.",
+            "Some values appear to have been encoded in Gray code. The change between adjacent values may be important for reconstructing the message.",
+            "I could not finish decoding it before the doors locked. The conversion steps should reveal whether the message has been altered.",
+        ],
+        "level_three": [
+            "Lab log: Entry 03",
+            "The memory protocol controls a sequence of states. The indicator lamps advance only when the correct input is present at the clock edge.",
+            "I observed the AI repeating transitions that were not part of my original test sequence. I have left the state labels visible so the sequence can be checked manually.",
+            "Record the current state, the input, and the next state. A single incorrect transition can prevent the system from reaching its safe condition.",
+        ],
+        "level_four": [
+            "Lab log: Entry 04",
+            "The override terminal evaluates a Boolean expression before accepting a command. The AI has started displaying expressions that look plausible but do not always behave as expected.",
+            "I suspect the override check is comparing the submitted expression against the original truth table, not just its appearance.",
+            "Check every input combination before trusting a simplified form. A mismatch on even one row should be treated as a failed override.",
+        ],
+        "level_five": [
+            "Lab log: Entry 05",
+            "The vault alarm is controlled by a small combinational network. I copied the required output function into the terminal before the security AI restricted access.",
+            "The gate editor allows wires to be moved, but careless routing can make the diagram difficult to inspect. The output must match the required function for every specified input combination.",
+            "Use the simplest valid arrangement you can build, then test the live output rather than relying on the wire colours alone.",
+        ],
+        "level_six": [
+            "Lab log: Entry 06",
+            "The final terminal uses a five-cell shift register to generate a key stream. The seed and feedback taps determine the sequence produced by the machine.",
+            "The intercepted header can be used to check whether the generator has been configured correctly. The payload should only be decoded after the generated stream matches the expected sequence.",
+            "I have documented the register connections and left the timing trace available. Follow the shift operation one clock pulse at a time and verify the output before attempting decryption.",
+        ],
+    }
+
+    DEFAULT_FINDINGS = {
+        "level_one": [
+            "The lock was built from basic logic gates. I checked the truth table and restored the required AND behaviour.",
+            "Recorded answer: AND truth table output 0001 (for inputs 00, 01, 10, 11).",
+        ],
+        "level_two": [
+            "I decoded the intercepted number sequence by checking the number-system conversions and preserving the recovered order.",
+            "Recorded sequence: 3, 5, 9, 14, 3, 5, 8, 12.",
+        ],
+        "level_three": [
+            "I traced the memory protocol one transition at a time and compared each state against the required sequence until the state machine advanced correctly.",
+            "Recorded state sequence: A-A-B-C-D-C.",
+        ],
+        "level_four": [
+            "I tested the override expression against the original Boolean function instead of trusting the terminal's claim. The accepted form had to match for every required input combination.",
+            "Recorded bomb-risk value: 10.",
+            "Recorded equivalent expression: XNOR(D, B) + B C' (as written in the recovered clue).",
+        ],
+        "level_five": [
+            "I rebuilt the vault-alarm logic using the available two-input gates, then checked the output against the required function rather than relying on the wire layout.",
+            "Required function: F = B'D' + BD + C'D'.",
+        ],
+        "level_six": [
+            "I restored the five-cell signal register, set the seed, connected the feedback path, and checked the generated stream against the intercepted header before decrypting the payload.",
+            "Recovered key: K7. Register seed: 01101.",
+        ],
+    }
+
     def __init__(self):
         # One source of truth for the open state.
         self.open = False
@@ -59,6 +130,7 @@ class DetectiveNotebook:
         self.page = "index"
         self.selected_index = 0
         self.selected_level = None
+        self.notes_scroll = 0
 
         self.level_status = {
             level_id: {
@@ -79,6 +151,7 @@ class DetectiveNotebook:
         ]
 
         self.reference_notes = {
+            # Keep the existing interactive Logic Gates prototype unchanged.
             "LOGIC GATES": [
                 "AND: output is 1 when both inputs are 1.",
                 "OR: output is 1 when at least one input is 1.",
@@ -89,37 +162,72 @@ class DetectiveNotebook:
                 "XNOR: output is 1 when inputs match.",
             ],
             "NUMBER SYSTEMS": [
-                "Binary uses the digits 0 and 1.",
-                "Binary place values are powers of two.",
-                "Gray code changes one bit between adjacent values.",
-                "For Gray-to-binary conversion, the first binary bit",
-                "matches the first Gray bit. Each next binary bit is",
-                "the previous binary bit XOR the current Gray bit.",
+                "BINARY",
+                "- Uses only 0 and 1.",
+                "- Each position is a power of 2, from right to left:",
+                "  2^0, 2^1, 2^2, 2^3, and so on.",
+                "- Convert binary to decimal by adding the place",
+                "  values whose bits are 1.",
+                "GRAY CODE",
+                "- Adjacent Gray-code values differ by one bit.",
+                "- Gray to binary: copy the first Gray bit.",
+                "- Each next binary bit = previous binary bit XOR",
+                "  the current Gray bit.",
+                "- Binary to Gray: copy the first binary bit, then",
+                "  XOR each binary bit with the bit immediately before it.",
             ],
             "STATE MACHINES": [
-                "A state machine changes state according to its input.",
-                "A transition describes movement from one state to another.",
-                "Track the current state, input, and resulting state.",
+                "- A state stores the system's current condition.",
+                "- A transition moves the machine from one state to another.",
+                "- The next state depends on the current state and input.",
+                "- Read the transition table row for the current state",
+                "  and input to find the next state.",
+                "- A clocked machine updates state at the active clock edge.",
+                "- Trace one clock step at a time: current state, input,",
+                "  next state, and output.",
+                "- An invalid or missing transition can block the required sequence.",
             ],
             "BOOLEAN ALGEBRA": [
-                "Boolean variables take values 0 or 1.",
-                "AND is commonly written as A·B.",
-                "OR is commonly written as A+B.",
-                "NOT is written as A' or ¬A.",
-                "Evaluate parentheses before surrounding operations.",
+                "- Boolean variables can only be 0 (false) or 1 (true).",
+                "- AND: A·B is 1 only when both A and B are 1.",
+                "- OR: A+B is 1 when at least one input is 1.",
+                "- NOT: A' reverses A; 0 becomes 1 and 1 becomes 0.",
+                "- XOR: A⊕B is 1 when the inputs differ.",
+                "- XNOR: A⊙B is 1 when the inputs match.",
+                "- De Morgan: (A·B)' = A' + B'.",
+                "- De Morgan: (A+B)' = A'·B'.",
+                "- Apply brackets first, then NOT, AND, OR unless",
+                "  brackets or the expression specify another order.",
+                "- Equivalent expressions must produce the same output",
+                "  for every possible input combination.",
             ],
             "KARNAUGH MAPS": [
-                "Adjacent cells differ in one variable.",
-                "Group adjacent 1s in powers of two.",
-                "Use the largest valid groups where possible.",
-                "Groups may wrap across opposite edges.",
-                "A variable that changes within a group is eliminated.",
+                "- A K-map simplifies a Boolean function visually.",
+                "- Place the truth-table outputs into the correct cells.",
+                "- Group 1s in rectangles containing 1, 2, 4, 8, ... cells.",
+                "- Make groups as large as possible while covering every 1.",
+                "- Groups may overlap when it helps simplify the result.",
+                "- Opposite edges count as adjacent; groups can wrap around.",
+                "- Diagonal cells are not adjacent.",
+                "- A variable that changes within a group is eliminated.",
+                "- OR the simplified terms from all groups to form the result.",
             ],
             "REGISTERS AND LFSRs": [
-                "A register stores a sequence of binary bits.",
-                "A shift moves the stored bits to new positions.",
-                "An LFSR uses feedback, commonly formed with XOR.",
-                "The seed and feedback taps affect the generated sequence.",
+                "REGISTERS",
+                "- A flip-flop stores one bit: 0 or 1.",
+                "- A register is a group of flip-flops storing a bit pattern.",
+                "- On a clock pulse, bits shift according to the wiring.",
+                "- Check the shift direction and each cell's next value.",
+                "LFSR (LINEAR FEEDBACK SHIFT REGISTER)",
+                "- Feedback is calculated from selected register taps.",
+                "- XOR of the tapped bits produces the feedback bit.",
+                "- The feedback bit enters the specified end of the register.",
+                "- The seed is the initial register pattern.",
+                "- The seed and tap positions determine the generated sequence.",
+                "- To check a stream, record the register state and output",
+                "  after every clock pulse.",
+                "- For XOR-based stream encryption, plaintext XOR key bit",
+                "  gives ciphertext; ciphertext XOR key bit recovers plaintext.",
             ],
         }
 
@@ -141,8 +249,9 @@ class DetectiveNotebook:
 
         self.title_font = self._font(25)
         self.button_font = self._font(17)
-        self.body_font = self._font(15)
-        self.small_font = self._font(12)
+        self.body_font = self._font(18)
+        self.small_font = self._font(16)
+        self.notes_font = self._font(17)
 
         self.buttons = []
         self.back_button = None
@@ -193,15 +302,16 @@ class DetectiveNotebook:
     # LEVEL PROGRESSION
     # --------------------------------------------------------
 
-    def complete_level(self, level_id, notes):
-        """Save the detective's findings and unlock the next level."""
+    def complete_level(self, level_id, notes=None):
+        """Record detective findings and unlock the following case file."""
         if level_id not in self.level_status:
             return
 
         status = self.level_status[level_id]
         status["solved"] = True
         status["unlocked"] = True
-        status["notes"] = list(notes)
+        findings = notes if notes else self.DEFAULT_FINDINGS.get(level_id, [])
+        status["notes"] = list(findings)
 
         level_ids = [item[0] for item in self.LEVELS]
         index = level_ids.index(level_id)
@@ -268,11 +378,17 @@ class DetectiveNotebook:
                 return True
 
             if event.key in (pygame.K_UP, pygame.K_w):
-                self._move_selection(-1)
+                if self.page == "level":
+                    self.notes_scroll = max(0, self.notes_scroll - 1)
+                else:
+                    self._move_selection(-1)
                 return True
 
             if event.key in (pygame.K_DOWN, pygame.K_s):
-                self._move_selection(1)
+                if self.page == "level":
+                    self.notes_scroll += 1
+                else:
+                    self._move_selection(1)
                 return True
 
             if event.key == pygame.K_a and self.page == "reference_topic" and self.selected_level == "LOGIC GATES":
@@ -296,6 +412,10 @@ class DetectiveNotebook:
                 self._activate_selection()
                 return True
 
+            return True
+
+        if event.type == pygame.MOUSEWHEEL and self.page == "level":
+            self.notes_scroll = max(0, self.notes_scroll - event.y)
             return True
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -361,6 +481,7 @@ class DetectiveNotebook:
                 return
 
             self.selected_level = value
+            self.notes_scroll = 0
             self.page = "level"
 
         elif action_type == "reference":
@@ -648,74 +769,75 @@ class DetectiveNotebook:
             item for item in self.LEVELS if item[0] == level_id
         )
 
-        title = self._fit_text(heading, content.width, 22, INK)
+        title = self._fit_text(heading, content.width, 24, INK)
         screen.blit(title, (content.x + 3, content.y + 2))
 
         subtitle_surface = self._fit_text(
-            subtitle, content.width, 14, MUTED
+            subtitle, content.width, 17, MUTED
         )
         screen.blit(subtitle_surface, (content.x + 3, content.y + 32))
 
         pygame.draw.line(
-            screen,
-            PAGE_LINE,
-            (content.x + 2, content.y + 55),
-            (content.right - 2, content.y + 55),
-            2,
+            screen, PAGE_LINE,
+            (content.x + 2, content.y + 58),
+            (content.right - 2, content.y + 58), 2,
         )
 
-        y = content.y + 69
-        max_y = self.back_button.y - 12
+        top_y = content.y + 70
+        max_y = self.back_button.y - 14
+        text_area = pygame.Rect(
+            content.x + 3, top_y, content.width - 12, max(0, max_y - top_y)
+        )
 
         if not status["unlocked"]:
-            self._text(
-                screen, "THIS CASE FILE IS SEALED.",
-                content.x + 3, y, LOCKED, self.body_font,
-            )
-            self._text(
-                screen,
-                "Resolve the previous investigation to access it.",
-                content.x + 3, y + 28, MUTED, self.small_font,
-            )
+            self._text(screen, "THIS CASE FILE IS SEALED.",
+                       content.x + 3, top_y, LOCKED, self.body_font)
+            self._text(screen, "Resolve the previous investigation to access it.",
+                       content.x + 3, top_y + 32, MUTED, self.small_font)
+            self._draw_back_button(screen)
+            return
 
-        elif not status["solved"]:
-            self._text(
-                screen, "NO NOTES RECORDED YET.",
-                content.x + 3, y, INK, self.body_font,
-            )
-            self._text(
-                screen,
-                "Solve this level to record your discovery.",
-                content.x + 3, y + 30, MUTED, self.small_font,
-            )
+        # Both sections are authored in code. Scientist notes appear as soon
+        # as the level is unlocked. Detective findings appear only after solve.
+        entries = []
+        entries.append(("SCIENTIST'S NOTES", DARK_GREEN, True))
+        entries.extend((line, INK, False) for line in self.SCIENTIST_NOTES.get(level_id, []))
 
+        if status["solved"]:
+            entries.append(("DETECTIVE'S FINDINGS", MAROON, True))
+            findings = status["notes"] or self.DEFAULT_FINDINGS.get(level_id, [])
+            entries.extend((line, MAROON, False) for line in findings)
         else:
-            self._text(
-                screen, "DETECTIVE'S FINDINGS",
-                content.x + 3, y, INK, self.body_font,
-            )
-            y += 29
-            line_gap = 20
+            entries.append(("DETECTIVE'S FINDINGS", MUTED, True))
+            entries.append(("Findings will be recorded after this level is solved.", MUTED, False))
 
-            for note in status["notes"]:
-                wrapped = self._wrap_text(
-                    str(note), content.width - 12, self.small_font
-                )
+        rendered_lines = []
+        for text, color, is_heading in entries:
+            font = self.body_font if is_heading else self.notes_font
+            wrapped = self._wrap_text(str(text), text_area.width - 12, font)
+            for line in wrapped:
+                rendered_lines.append((line, color, font, is_heading))
+            rendered_lines.append(("", INK, font, False))
 
-                for line in wrapped:
-                    if y + line_gap > max_y:
-                        break
+        line_gap = 25
+        max_scroll = max(0, len(rendered_lines) - max(1, text_area.height // line_gap))
+        self.notes_scroll = min(self.notes_scroll, max_scroll)
+        visible_lines = rendered_lines[self.notes_scroll:]
 
-                    self._text(
-                        screen, line,
-                        content.x + 7, y, INK, self.small_font,
-                    )
-                    y += line_gap
+        screen.set_clip(text_area)
+        y = text_area.y
+        for line, color, font, is_heading in visible_lines:
+            if y + line_gap > text_area.bottom:
+                break
+            if line:
+                self._text(screen, line, text_area.x + 5, y, color, font)
+            y += line_gap if line else 10
+        screen.set_clip(None)
 
-                y += 5
-
-                if y >= max_y:
-                    break
+        if max_scroll > 0:
+            hint = "UP / DOWN OR MOUSE WHEEL: SCROLL NOTES"
+            hint_surface = self._fit_text(hint, text_area.width, 13, MUTED)
+            screen.blit(hint_surface, (text_area.x + 5, max_y - 3))
 
         self._draw_back_button(screen)
 

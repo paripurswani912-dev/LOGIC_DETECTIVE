@@ -1094,6 +1094,20 @@ def main():
                     game_state.close_puzzle()
                     active_puzzle_id = None
 
+                    notebook_level_ids = {
+                        "logic_lock": "level_one",
+                        "hidden_transmission": "level_two",
+                        "memory_protocol": "level_three",
+                        "final_override": "level_four",
+                        "logic_architect": "level_five",
+                        "signal_breaker": "level_six",
+                    }
+
+                    if completed_id in notebook_level_ids:
+                        notebook.complete_level(
+                           notebook_level_ids[completed_id]
+                        )    
+
                 continue
 
             if mode == GameState.ENDING:
