@@ -1,3 +1,4 @@
+
 """Shared settings for Logic Detective."""
 
 GAME_TITLE = "Logic Detective: The Digital Escape Room"
@@ -16,6 +17,7 @@ FINAL_LEVEL_TIME = 120
 # General colors
 BLACK = (5, 10, 18)
 WHITE = (235, 244, 250)
+
 DARK_BLUE = (9, 20, 33)
 PANEL_BLUE = (18, 35, 52)
 
