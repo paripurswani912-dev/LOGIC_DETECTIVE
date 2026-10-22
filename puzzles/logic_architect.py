@@ -1,7 +1,8 @@
-
 # Level 5: Vault Alarm Puzzle
 # Four-variable Karnaugh map with don't-cares, wraparound,
 # overlapping groups, and horizontal/vertical grouping only.
+# Only maximal (prime) groups are accepted, and the final answer
+# must use the minimum number of groups.
 
 import itertools
 import pygame
@@ -42,8 +43,8 @@ class LogicArchitectPuzzle(BasePuzzle):
     HINTS = [
         "Rows are AB and columns are CD, in Gray-code order: 00, 01, 11, 10.",
         "The map wraps around: opposite edges touch, including the corners.",
-        "Groups may contain 1, 2, 4, 8, or 16 cells. Use X if helpful, never 0.",
-        "Groups can overlap. Horizontal and vertical groups are allowed, not diagonal.",
+        "Groups must be 1, 2, 4, 8, or 16 cells. Use X if helpful, never 0.",
+        "Make each group as large as possible. Overlap is fine, and fewer groups is better.",
     ]
 
     def __init__(self):
@@ -228,8 +229,16 @@ class LogicArchitectPuzzle(BasePuzzle):
             self.selected.clear()
             return
 
-        # Groups may overlap and do not have to be maximal.
-        # For example, m2 and m10 can form a two-cell wraparound group.
+        # Only the largest possible groups are allowed (simplification rule).
+        if group not in self.primes:
+            self.message = (
+                "This group can be made bigger. Look for the largest "
+                "group, using wraparound and Xs."
+            )
+            self.selected.clear()
+            return
+
+        # Groups may overlap.
         self.groups.append(group)
         self.selected.clear()
 
@@ -258,11 +267,19 @@ class LogicArchitectPuzzle(BasePuzzle):
             return
 
         for index, group in enumerate(self.groups, start=1):
-            if not self.valid_group(group):
+            if not self.valid_group(group) or group not in self.primes:
                 self.message = (
                     f"Group {index} is invalid. Remove it and try again."
                 )
                 return
+
+        # Every 1 is covered, but is the expression fully simplified?
+        if len(self.groups) > self.min_cover:
+            self.message = (
+                "Everything is covered, but it is not simplified. "
+                f"Some groups are redundant. Use only {self.min_cover} groups."
+            )
+            return
 
         # Keep the generated expression; no sector key is displayed.
         terms = sorted(set(self.term_for(group) for group in self.groups))
@@ -710,8 +727,8 @@ class LogicArchitectPuzzle(BasePuzzle):
             )
         else:
             instruction = (
-                "Select a valid group, then press SPACE to save it. "
-                "Groups may overlap and wrap around."
+                "Select the largest possible groups, then press SPACE "
+                "to save each one. Groups may overlap and wrap around."
             )
 
         instruction_y = map_heading_y + title_font.get_height() + 3
@@ -776,8 +793,8 @@ class LogicArchitectPuzzle(BasePuzzle):
 
         self.cell_width = min(cell_width, max_cell_width)
 
-        # CHANGE 1: make each K-map cell exactly 2 pixels taller.
-        # Width is unchanged. Keep the whole map within its available area.
+        # Each K-map cell is 2 pixels taller. Width is unchanged.
+        # Keep the whole map within its available area.
         self.cell_height = min(cell_height + 2, max_cell_height)
 
         grid_width = self.cell_width * 4
