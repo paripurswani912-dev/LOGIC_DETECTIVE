@@ -1,12 +1,8 @@
+
 # puzzles/logic_lock_circuits.py
-# Level 1 add-on: Gate Lab (optional sandbox, key P) and the
-# mandatory BUILD phase (wire the AND-gate alarm and verify it).
-#
-# Used as a mixin by LogicLockPuzzle, so it relies on these
-# existing methods/attributes of that class:
-#   _make_font, _draw_text, _fit_text, _draw_pixel_monitor,
-#   elapsed_time, awaiting_exit_confirmation, submitted,
-#   alarm_activated, message
+# Level 1 progression:
+# Stage 2: Mandatory NEXUS-9 Gate Analysis
+# Stage 3: Existing truth-table puzzle, then mandatory circuit build
 
 import pygame
 
@@ -18,41 +14,173 @@ from puzzles.circuit_engine import (
 LAB_GATES = ["AND", "OR", "XOR", "NAND", "NOR", "XNOR"]
 CORRECT_OUTPUTS = [0, 0, 0, 1]
 
+BG = (5, 7, 17)
+PANEL = (7, 17, 31)
+SYMBOL = (0, 218, 231)
+SYMBOL_DIM = (44, 103, 125)
+TEXT = (220, 232, 244)
 
-def _make_circuit(wired):
+
+def _make_circuit(wired=True):
     c = Circuit()
     c.add(Component("A", "SWITCH", 0.13, 0.28, "A", "SMOKE SENSOR"))
     c.add(Component("B", "SWITCH", 0.13, 0.72, "B", "SYSTEM ARMED"))
     c.add(Component("G", "AND", 0.50, 0.50))
     c.add(Component("Y", "LED", 0.87, 0.50, "ALARM"))
+
     if wired:
         c.connect("A", "G", 0)
         c.connect("B", "G", 1)
         c.connect("G", "Y", 0)
+
+    return c
+
+
+def _pixel_line(surface, color, points, width=3):
+    """Chunky, pixel-style lines for logic-gate symbols."""
+    points = [(int(x), int(y)) for x, y in points]
+    pygame.draw.lines(surface, color, False, points, width)
+
+    # Square endpoint pixels give the strokes a retro look.
+    for x, y in points:
+        pygame.draw.rect(
+            surface, color,
+            (x - width // 2, y - width // 2, width, width)
+        )
+
+
+def draw_gate_symbol(surface, gate, rect, color=SYMBOL, scale=1):
+    """Draw a recognizable logic-gate symbol using Pygame primitives."""
+    rect = pygame.Rect(rect)
+    cx, cy = rect.center
+
+    # Keep the symbol centered inside its drawing area.
+    w = max(12, int(rect.width * 0.66))
+    h = max(12, int(rect.height * 0.66))
+    left = cx - w // 2
+    right = cx + w // 2
+    top = cy - h // 2
+    bottom = cy + h // 2
+    mid = cy
+    stroke = max(2, int(3 * scale))
+
+    # Input leads.
+    input_top = (left - max(5, w // 5), top + h // 3)
+    input_bottom = (left - max(5, w // 5), top + 2 * h // 3)
+
+    _pixel_line(surface, color, [
+        input_top, (left, input_top[1])
+    ], stroke)
+    _pixel_line(surface, color, [
+        input_bottom, (left, input_bottom[1])
+    ], stroke)
+
+    if gate in ("AND", "NAND"):
+        points = [
+            (left, top), (left + w // 2, top),
+            (left + 3 * w // 4, top + h // 8),
+            (right, mid),
+            (left + 3 * w // 4, bottom - h // 8),
+            (left + w // 2, bottom), (left, bottom),
+            (left, top),
+        ]
+        _pixel_line(surface, color, points, stroke)
+
+    elif gate in ("OR", "NOR", "XOR", "XNOR"):
+        # Approximate the curved OR outline with short straight
+        # segments so it stays crisp and pixel-like.
+        points = [
+            (left, top),
+            (left + w // 3, top),
+            (left + 2 * w // 3, top + h // 8),
+            (right, mid),
+            (left + 2 * w // 3, bottom - h // 8),
+            (left + w // 3, bottom),
+            (left, bottom),
+            (left + w // 6, mid),
+            (left, top),
+        ]
+        _pixel_line(surface, color, points, stroke)
+
+        if gate in ("XOR", "XNOR"):
+            _pixel_line(surface, color, [
+                (left - max(5, w // 6), top),
+                (left - max(2, w // 12), mid),
+                (left - max(5, w // 6), bottom),
+            ], stroke)
+
+    elif gate == "NOT":
+        _pixel_line(surface, color, [
+            (left, top), (right - 5, mid), (left, bottom),
+            (left, top)
+        ], stroke)
+        pygame.draw.circle(surface, color, (right, mid), 4, stroke)
+
+    elif gate == "BUFFER":
+        _pixel_line(surface, color, [
+            (left, top), (right, mid), (left, bottom),
+            (left, top)
+        ], stroke)
+
+    if gate in ("NAND", "NOR", "XNOR"):
+        pygame.draw.circle(
+            surface, color, (right + 5, mid), 4, stroke
+        )
+
+    # Output lead.
+    output_x = right + (11 if gate in ("NAND", "NOR", "XNOR", "NOT") else 4)
+    _pixel_line(surface, color, [
+        (output_x, mid), (min(rect.right - 2, output_x + 10), mid)
+    ], stroke)
+
+
+def _make_gate_lab_circuit(gate="AND"):
+    c = Circuit()
+    c.add(Component("A", "SWITCH", 0.13, 0.28, "A", "SMOKE SENSOR"))
+    c.add(Component("B", "SWITCH", 0.13, 0.72, "B", "SYSTEM ARMED"))
+    c.add(Component("G", gate, 0.50, 0.50))
+    c.add(Component("Y", "LED", 0.87, 0.50, "OUTPUT"))
+    c.connect("A", "G", 0)
+    c.connect("B", "G", 1)
+    c.connect("G", "Y", 0)
     return c
 
 
 class LogicLockCircuitMixin:
-
     # ---------------------------------------------------------
     # SETUP / RESET
     # ---------------------------------------------------------
 
     def _init_circuits(self):
-        self.phase = "ANALYZE"  # ANALYZE -> BUILD
-        self.lab_open = False
+        # Gate analysis comes BEFORE the original puzzle.
+        self.phase = "GATE_ANALYSIS"
+        self.lab_open = True
         self.lab_gate_index = 0
         self.lab_message = (
-            "Click the switches. Press 1-6 or click a gate to swap it."
+            "Clue: the alarm needs BOTH conditions to be true."
         )
         self.lab_buttons = []
+        self.lab_confirm_rect = None
 
-        self.lab = Workbench(_make_circuit(wired=True), allow_wiring=False)
+        self.lab = Workbench(_make_gate_lab_circuit("AND"))
+        self.lab.area = pygame.Rect(0, 0, 1, 1)
+
+        # Track which input combinations the player has tested.
+        self.lab_seen_inputs = set()
+        self._record_lab_inputs()
+
         self.build = Workbench(_make_circuit(wired=False))
         self.build_message = (
-            "Wire the circuit, test all 4 switch combinations, "
-            "then press ENTER."
+            "Wire A and B into the gate, then connect the gate to ALARM."
         )
+
+    def _record_lab_inputs(self):
+        try:
+            a = self.lab.circuit.comps["A"].value
+            b = self.lab.circuit.comps["B"].value
+            self.lab_seen_inputs.add((int(a), int(b)))
+        except (AttributeError, KeyError, TypeError, ValueError):
+            pass
 
     def start_build_phase(self):
         self.phase = "BUILD"
@@ -62,60 +190,107 @@ class LogicLockCircuitMixin:
             "and the gate into the ALARM."
         )
 
+    def _finish_gate_analysis(self):
+        outputs = [
+            out for _, out in self.lab.circuit.truth_table(["A", "B"], "Y")
+        ]
+
+        if len(self.lab_seen_inputs) < 4:
+            self.lab_message = (
+                "Evidence incomplete: test every input combination first."
+            )
+            return
+
+        if outputs != CORRECT_OUTPUTS:
+            self.lab_message = (
+                "Not quite, Detective. Find the gate that activates only "
+                "when both inputs are ON."
+            )
+            return
+
+        self.phase = "ANALYZE"
+        self.lab_open = False
+        self.lab_message = "Gate analysis complete. Stage 3 unlocked."
+        self.selected_gate = None
+        self.selected_row = 0
+
     # ---------------------------------------------------------
-    # EVENTS  (returns True when the event was consumed)
+    # EVENTS
     # ---------------------------------------------------------
 
     def circuit_handle_event(self, event):
-        # Success screen: let the original Enter handling run.
         if self.awaiting_exit_confirmation or self.solved:
             return False
 
-        if self.phase == "ANALYZE":
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_p:
-                self.lab_open = not self.lab_open
-                return True
-            if not self.lab_open:
-                return False
+        if self.phase == "GATE_ANALYSIS":
             self._lab_event(event)
             return True
 
-        # BUILD phase
-        if event.type == pygame.KEYDOWN:
-            if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                self.verify_build()
+        if self.phase == "ANALYZE":
+            return False
+
+        if self.phase == "BUILD":
+            if event.type == pygame.KEYDOWN:
+                if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                    self.verify_build()
+                return True
+
+            msg = self.build.handle_event(event)
+            if msg:
+                self.build_message = msg
             return True
 
-        msg = self.build.handle_event(event)
-        if msg:
-            self.build_message = msg
-        return True
+        return False
 
     def _set_lab_gate(self, index):
         self.lab_gate_index = index
-        self.lab.circuit.comps["G"].kind = LAB_GATES[index]
-        self.lab_message = f"{LAB_GATES[index]} gate selected. Test it!"
+        name = LAB_GATES[index]
+        self.lab.circuit.comps["G"].kind = name
+        self.lab_seen_inputs.clear()
+        self._record_lab_inputs()
+        self.lab_message = (
+            f"{name} selected. Test the switches and observe the output."
+        )
 
     def _lab_event(self, event):
         if event.type == pygame.KEYDOWN:
-            keys = [
-                pygame.K_1, pygame.K_2, pygame.K_3,
-                pygame.K_4, pygame.K_5, pygame.K_6,
-            ]
-            if event.key in keys:
-                self._set_lab_gate(keys.index(event.key))
+            if pygame.K_1 <= event.key <= pygame.K_6:
+                self._set_lab_gate(event.key - pygame.K_1)
+                return
+
+            if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                self._finish_gate_analysis()
+                return
+
             return
 
-        if (
-            event.type == pygame.MOUSEBUTTONDOWN
-            and event.button == 1
-        ):
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             for index, rect in enumerate(self.lab_buttons):
                 if rect.collidepoint(event.pos):
                     self._set_lab_gate(index)
                     return
 
+            if (
+                self.lab_confirm_rect
+                and self.lab_confirm_rect.collidepoint(event.pos)
+            ):
+                self._finish_gate_analysis()
+                return
+
+        # Let the existing Workbench handle switch interactions.
+        before = (
+            self.lab.circuit.comps["A"].value,
+            self.lab.circuit.comps["B"].value,
+        )
         msg = self.lab.handle_event(event)
+        after = (
+            self.lab.circuit.comps["A"].value,
+            self.lab.circuit.comps["B"].value,
+        )
+
+        if before != after:
+            self._record_lab_inputs()
+
         if msg:
             self.lab_message = msg
 
@@ -143,19 +318,19 @@ class LogicLockCircuitMixin:
             self.build_message = "CIRCUIT VERIFIED! ALARM HAS BEEN ACTIVATED!"
 
     # ---------------------------------------------------------
-    # DRAWING
+    # DRAW ROUTING
     # ---------------------------------------------------------
 
     def draw(self, screen):
-        if self.phase == "BUILD":
-            self._draw_build(screen)
-        elif self.lab_open:
+        if self.phase == "GATE_ANALYSIS":
             self._draw_lab(screen)
+        elif self.phase == "BUILD":
+            self._draw_build(screen)
         else:
             self._draw_analyze(screen)
 
     def _frame(self, screen, alert_text, alert_colour):
-        screen.fill((5, 7, 17))
+        screen.fill(BG)
         w, h = screen.get_size()
         panel = self._draw_pixel_monitor(
             screen, pygame.Rect(18, 14, w - 36, h - 28)
@@ -165,7 +340,9 @@ class LogicLockCircuitMixin:
         y = panel.top + 17
 
         if int(self.elapsed_time * 2.5) % 2 == 0:
-            pygame.draw.rect(screen, alert_colour, (left, y + 4, 8, 8))
+            pygame.draw.rect(
+                screen, alert_colour, (left, y + 4, 8, 8)
+            )
             alert = self._fit_text(
                 alert_text, right - left - 20, 16, alert_colour
             )
@@ -173,126 +350,169 @@ class LogicLockCircuitMixin:
 
         return panel, left, right, y + 32
 
+    def _draw_lab(self, screen):
+        panel, left, right, y = self._frame(
+            screen, "NEXUS-9 // FORENSIC GATE ANALYSIS // STAGE 2", YELLOW
+        )
+        width = right - left
+
+        self._draw_text(
+            screen, "THE ALARM'S SECRET", left, y, CYAN, self.title_font
+        )
+        y += 36
+
+        clues = [
+            "Detective, the alarm circuit has been wiped from the system.",
+            "Two independent signals control it: smoke detected and system armed.",
+            "Clue: the alarm must stay silent if either condition is false.",
+            "Test the gates. Watch the output lamp and the live truth table.",
+        ]
+
+        for line in clues:
+            surface = self._fit_text(line, width, 14, WHITE)
+            screen.blit(surface, (left, y))
+            y += 22
+
+        y += 5
+        pygame.draw.line(screen, SYMBOL_DIM, (left, y), (right, y), 2)
+        y += 10
+
+        self._draw_text(
+            screen, "SELECT A GATE TO INVESTIGATE",
+            left, y, CYAN, self.font
+        )
+        y += 28
+
+        gap = 8
+        btn_w = (width - gap * (len(LAB_GATES) - 1)) // len(LAB_GATES)
+        self.lab_buttons = []
+
+        for i, name in enumerate(LAB_GATES):
+            rect = pygame.Rect(left + i * (btn_w + gap), y, btn_w, 67)
+            self.lab_buttons.append(rect)
+
+            selected = i == self.lab_gate_index
+            border = SYMBOL if selected else (104, 115, 132)
+            pygame.draw.rect(screen, PANEL, rect)
+            pygame.draw.rect(screen, border, rect, 3)
+
+            symbol_rect = pygame.Rect(
+                rect.x + 8, rect.y + 4, rect.width - 16, 37
+            )
+            draw_gate_symbol(
+                screen, name, symbol_rect,
+                SYMBOL if selected else (150, 172, 190)
+            )
+
+            label = self._fit_text(name, rect.width - 8, 12, border)
+            screen.blit(
+                label, label.get_rect(center=(rect.centerx, rect.bottom - 12))
+            )
+
+        y += 78
+
+        # Simulation workbench: existing interactive switches, gate and lamp.
+        area_h = max(130, min(245, panel.bottom - y - 160))
+        self.lab.area = pygame.Rect(left, y, int(width * 0.60), area_h)
+        self.lab.draw(screen)
+
+        table_x = self.lab.area.right + 20
+        table_w = right - table_x
+        self._draw_text(
+            screen, "LIVE TRUTH TABLE", table_x, y, CYAN, self.font
+        )
+        y_after_table = self._draw_live_table(
+            screen, table_x, y + 28, table_w, self.lab
+        )
+
+        y = max(self.lab.area.bottom, y_after_table) + 10
+
+        message = self._fit_text(
+            self.lab_message, width, 13, YELLOW
+        )
+        screen.blit(message, (left, y))
+        y += 24
+
+        self.lab_confirm_rect = pygame.Rect(left, y, min(280, width), 32)
+        pygame.draw.rect(screen, (8, 23, 38), self.lab_confirm_rect)
+        pygame.draw.rect(screen, SYMBOL, self.lab_confirm_rect, 2)
+        confirm = self._make_font(12).render(
+            "[ ENTER ] SUBMIT YOUR FINDING", False, SYMBOL
+        )
+        screen.blit(
+            confirm, confirm.get_rect(center=self.lab_confirm_rect.center)
+        )
+
+        hint = self._fit_text(
+            "Test all 4 input combinations before submitting.",
+            width, 12, GREY
+        )
+        screen.blit(hint, (left, y + 39))
+
     def _draw_live_table(self, screen, x, y, w, bench):
         circuit = bench.circuit
-        current = (circuit.comps["A"].value, circuit.comps["B"].value)
+        current = (
+            circuit.comps["A"].value,
+            circuit.comps["B"].value,
+        )
         rows = circuit.truth_table(["A", "B"], "Y")
-
-        col_w = w // 3
-        header_h, row_h = 25, 29
+        col_w = max(1, w // 3)
+        header_h, row_h = 23, 25
 
         for col, label in enumerate(["A", "B", "Y"]):
             cell = pygame.Rect(x + col * col_w, y, col_w, header_h)
             pygame.draw.rect(screen, (13, 29, 44), cell)
             pygame.draw.rect(screen, CYAN_DIM, cell, 2)
             self._draw_text(
-                screen, label, cell.x + 8, cell.y + 5,
-                ORANGE, self.small_font,
+                screen, label, cell.x + 6, cell.y + 4,
+                ORANGE, self.small_font
             )
 
         y += header_h
         for bits, out in rows:
             active = bits == current
-            values = [str(bits[0]), str(bits[1]),
-                      "—" if out is None else str(out)]
+            values = [
+                str(bits[0]), str(bits[1]),
+                "—" if out is None else str(out)
+            ]
+
             for col, value in enumerate(values):
-                cell = pygame.Rect(x + col * col_w, y, col_w, row_h)
-                pygame.draw.rect(
-                    screen, (14, 43, 58) if active else (7, 17, 31), cell
+                cell = pygame.Rect(
+                    x + col * col_w, y, col_w, row_h
                 )
                 pygame.draw.rect(
-                    screen, (0, 205, 220) if active else (40, 83, 105),
-                    cell, 2 if active else 1,
+                    screen, (14, 43, 58) if active else PANEL, cell
                 )
-                colour = WHITE
-                if col == 2 and out == 1:
-                    colour = GREEN
+                pygame.draw.rect(
+                    screen, SYMBOL if active else (40, 83, 105),
+                    cell, 2 if active else 1
+                )
+                colour = GREEN if col == 2 and out == 1 else WHITE
                 self._draw_text(
-                    screen, value, cell.x + 8, cell.y + 7,
-                    colour, self.small_font,
+                    screen, value, cell.x + 6, cell.y + 5,
+                    colour, self.small_font
                 )
             y += row_h
+
         return y
-
-    # ---- Gate Lab ----
-
-    def _draw_lab(self, screen):
-        panel, left, right, y = self._frame(
-            screen, "GATE LAB // SANDBOX (OPTIONAL)", YELLOW
-        )
-        width = right - left
-
-        self._draw_text(
-            screen, "GATE LAB", left, y, CYAN, self.title_font
-        )
-        y += 36
-
-        line = self._fit_text(
-            "Flip the switches and compare the gates. Which one rings "
-            "the alarm ONLY when BOTH inputs are ON?",
-            width, 15, WHITE,
-        )
-        screen.blit(line, (left, y))
-        y += 30
-
-        # Gate selector buttons
-        gap = 8
-        btn_w = (width - gap * (len(LAB_GATES) - 1)) // len(LAB_GATES)
-        self.lab_buttons = []
-        for i, name in enumerate(LAB_GATES):
-            rect = pygame.Rect(left + i * (btn_w + gap), y, btn_w, 31)
-            self.lab_buttons.append(rect)
-            selected = i == self.lab_gate_index
-            colour = CYAN if selected else (104, 115, 132)
-            pygame.draw.rect(screen, (8, 23, 38), rect)
-            pygame.draw.rect(screen, colour, rect, 3)
-            label = self._fit_text(
-                f"[{i + 1}] {name}", btn_w - 10, 13, colour
-            )
-            screen.blit(label, label.get_rect(center=rect.center))
-        y += 31 + 14
-
-        area_h = max(150, panel.bottom - y - 95)
-        self.lab.area = pygame.Rect(left, y, int(width * 0.62), area_h)
-        self.lab.draw(screen)
-
-        table_x = self.lab.area.right + 22
-        self._draw_text(
-            screen, f"TRUTH TABLE: {LAB_GATES[self.lab_gate_index]}",
-            table_x, y, CYAN, self.font,
-        )
-        self._draw_live_table(
-            screen, table_x, y + 28, right - table_x, self.lab
-        )
-
-        y = self.lab.area.bottom + 12
-        msg = self._fit_text(self.lab_message, width, 14, YELLOW)
-        screen.blit(msg, (left, y))
-        hint = self._fit_text(
-            "P: Back to the mission   |   Click a switch to flip it",
-            width, 13, GREY,
-        )
-        screen.blit(hint, (left, y + 24))
-
-    # ---- Build phase ----
 
     def _draw_build(self, screen):
         panel, left, right, y = self._frame(
-            screen, "SECURITY BREACH // LEVEL ONE // BUILD", RED
+            screen, "SECURITY BREACH // LEVEL ONE // STAGE 4: BUILD", RED
         )
         width = right - left
 
         self._draw_text(
             screen, "BUILD THE ALARM CIRCUIT", left, y,
-            (0, 229, 239), self.title_font,
+            CYAN, self.title_font
         )
         y += 38
 
         for text in (
             "Mission: ring the alarm only when smoke is detected AND "
             "the system is armed.",
-            "Drag from an OUTPUT pin (right side) to an INPUT pin "
-            "(left side). Right-click an input pin to remove a wire.",
+            "Drag from an OUTPUT pin to an INPUT pin. Right-click an "
+            "input pin to remove a wire.",
         ):
             line = self._fit_text(text, width, 14, WHITE)
             screen.blit(line, (left, y))
@@ -300,7 +520,9 @@ class LogicLockCircuitMixin:
         y += 10
 
         area_h = max(150, panel.bottom - y - 85)
-        self.build.area = pygame.Rect(left, y, int(width * 0.62), area_h)
+        self.build.area = pygame.Rect(
+            left, y, int(width * 0.62), area_h
+        )
         self.build.draw(screen)
 
         table_x = self.build.area.right + 22
@@ -314,17 +536,16 @@ class LogicLockCircuitMixin:
         y = self.build.area.bottom + 12
 
         if self.awaiting_exit_confirmation:
-            if int(self.elapsed_time * 2.5) % 2 == 0:
-                msg = self._fit_text(self.build_message, width, 15, YELLOW)
-                screen.blit(msg, (left, y))
+            msg = self._fit_text(self.build_message, width, 14, YELLOW)
+            screen.blit(msg, (left, y))
             hint = self._fit_text(
                 "PRESS ENTER AGAIN TO CONTINUE", width, 13, GREY
             )
             screen.blit(hint, (left, y + 26))
         else:
-            colour = YELLOW
-            if self.build_message.startswith(("WRONG", "CIRCUIT INC")):
-                colour = RED
+            colour = RED if self.build_message.startswith(
+                ("WRONG", "CIRCUIT INC")
+            ) else YELLOW
             msg = self._fit_text(self.build_message, width, 14, colour)
             screen.blit(msg, (left, y))
             hint = self._fit_text(

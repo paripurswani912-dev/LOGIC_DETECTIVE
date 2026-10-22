@@ -773,73 +773,110 @@ class DetectiveNotebook:
         return 0
 
     def _draw_gate_symbol(self, screen, gate, rect, color):
-        """Draw chunky, reference-style pixel logic-gate symbols."""
-        rect = pygame.Rect(rect)
-        x, y, w, h = rect
-        # Use a smaller inset so symbols never collide with card borders.
-        left = x + int(w * 0.20)
-        right = x + int(w * 0.77)
-        top = y + int(h * 0.15)
-        bottom = y + int(h * 0.85)
-        mid = (top + bottom) // 2
-        stroke = max(2, min(4, h // 10))
+        """Thin-line pixel-art logic gate symbols (reference style)."""
+        x, y, w, h = pygame.Rect(rect)
 
-        def line(points, width=stroke):
-            pts = [(int(px), int(py)) for px, py in points]
-            if len(pts) >= 2:
-                pygame.draw.lines(screen, color, False, pts, width)
-                # Pixel-like square joints, matching the reference artwork.
-                for px, py in pts:
-                    pygame.draw.rect(screen, color,
-                                     (px-width//2, py-width//2, width, width))
+        stroke = 2 if h < 45 else 3              # line thickness
+        mid = y + h // 2
+        top = y + int(h * 0.12)
+        bottom = y + int(h * 0.88)
+        in_top = y + h // 3                      # input pin heights
+        in_bot = y + (2 * h) // 3                # (match the circuit pins)
 
-        def bubble(cx, cy, radius=max(3, stroke + 1)):
-            # Hollow output bubble; do not fill it.
-            pygame.draw.rect(screen, color,
-                             (int(cx-radius), int(cy-radius), radius*2, radius*2),
-                             max(2, stroke))
+        def poly(points, close=False):
+            pts = [(int(round(px)), int(round(py))) for px, py in points]
+            if close:
+                pts.append(pts[0])
+            for a, b in zip(pts, pts[1:]):
+                pygame.draw.line(screen, color, a, b, stroke)
+            for px, py in (pts[0], pts[-1]):     # square pixel end-caps
+                pygame.draw.rect(screen, color,
+                                 (px - stroke // 2, py - stroke // 2,
+                                  stroke, stroke))
 
+        def hline(x0, x1, yy):
+            x0, x1 = int(x0), int(x1)
+            if x1 > x0:
+                pygame.draw.rect(screen, color,
+                                 (x0, int(yy) - stroke // 2, x1 - x0, stroke))
+
+        def bezier(p0, p1, p2, steps=14):
+            pts = []
+            for i in range(steps + 1):
+                t = i / steps
+                a, b, c = (1 - t) ** 2, 2 * t * (1 - t), t * t
+                pts.append((a * p0[0] + b * p1[0] + c * p2[0],
+                            a * p0[1] + b * p1[1] + c * p2[1]))
+            return pts
+
+        # ---- horizontal layout -------------------------------------
+        bubble_size = max(5, stroke * 2 + 2)     # small hollow square bubble
+        has_bubble = gate in ("NAND", "NOR", "XNOR", "NOT")
+        out_len = max(6, int(w * 0.14))
+        gap = max(5, int(w * 0.05)) if gate in ("XOR", "XNOR") else 0
+
+        left = x + int(w * 0.14) + gap
+        right = x + w - out_len - (bubble_size if has_bubble else 0)
+
+        # Keep the body from stretching too long in wide, short boxes.
+        max_body = int((bottom - top) * 3.2)
+        if right - left > max_body:
+            extra = (right - left - max_body) // 2
+            left += extra
+            right -= extra
+        bw = max(10, right - left)
+
+        # ---- NOT ----------------------------------------------------
         if gate == "NOT":
-            # NOT has one input and a triangular inverter with output bubble.
-            line([(left, top), (right-7, mid), (left, bottom), (left, top)])
-            pygame.draw.line(screen, color, (x+2, mid), (left, mid), stroke)
-            bubble(right-3, mid, max(3, stroke+1))
-            pygame.draw.line(screen, color, (right+5, mid), (x+w-2, mid), stroke)
+            poly([(left, top), (right, mid), (left, bottom)], close=True)
+            hline(x, left, mid)
+            pygame.draw.rect(screen, color,
+                             (right, mid - bubble_size // 2,
+                              bubble_size, bubble_size), stroke)
+            hline(right + bubble_size, x + w, mid)
             return
 
-        in_top = y + int(h * 0.34)
-        in_bottom = y + int(h * 0.66)
-        pygame.draw.line(screen, color, (x+2, in_top), (left, in_top), stroke)
-        pygame.draw.line(screen, color, (x+2, in_bottom), (left, in_bottom), stroke)
-
+        # ---- AND / NAND --------------------------------------------
         if gate in ("AND", "NAND"):
-            # Flat left side and rounded/stepped right side.
-            line([(left, top), (left + (right-left)*0.48, top),
-                  (right-8, top + (bottom-top)*0.20),
-                  (right, mid),
-                  (right-8, bottom - (bottom-top)*0.20),
-                  (left + (right-left)*0.48, bottom),
-                  (left, bottom), (left, top)])
-        else:
-            # OR-family has the curved concave input side and pointed output.
-            if gate in ("XOR", "XNOR"):
-                line([(left-9, top), (left+1, mid), (left-9, bottom)])
-            line([(left, top),
-                  (left + (right-left)*0.28, top),
-                  (left + (right-left)*0.66, top + (bottom-top)*0.13),
-                  (right, mid),
-                  (left + (right-left)*0.66, bottom - (bottom-top)*0.13),
-                  (left + (right-left)*0.28, bottom),
-                  (left, bottom),
-                  (left + (right-left)*0.10, mid),
-                  (left, top)])
+            xc = left + bw * 0.5
+            upper = bezier((xc, top), (right, top), (right, mid))
+            lower = bezier((right, mid), (right, bottom), (xc, bottom))
+            poly([(left, top)] + upper + lower[1:] + [(left, bottom)],
+                 close=True)
+            hline(x, left, in_top)
+            hline(x, left, in_bot)
 
-        if gate in ("NAND", "NOR", "XNOR"):
-            bubble(right+4, mid, max(3, stroke+1))
-            out_start = right + 11
+        # ---- OR / NOR / XOR / XNOR ---------------------------------
         else:
-            out_start = right
-        pygame.draw.line(screen, color, (out_start, mid), (x+w-2, mid), stroke)
+            depth = bw * 0.36
+
+            def back_curve(base):
+                return bezier((base, top), (base + depth, mid), (base, bottom))
+
+            def back_x(base, yy):                # where a pin meets the curve
+                t = (yy - top) / (bottom - top)
+                return base + 2 * t * (1 - t) * depth
+
+            poly(bezier((left, top), (left + bw * 0.55, top), (right, mid)))
+            poly(bezier((left, bottom), (left + bw * 0.55, bottom), (right, mid)))
+            poly(back_curve(left))
+
+            base = left
+            if gate in ("XOR", "XNOR"):
+                base = left - gap
+                poly(back_curve(base))           # extra XOR curve
+
+            hline(x, back_x(base, in_top), in_top)
+            hline(x, back_x(base, in_bot), in_bot)
+
+        # ---- output bubble + output wire ----------------------------
+        if has_bubble:
+            pygame.draw.rect(screen, color,
+                             (right, mid - bubble_size // 2,
+                              bubble_size, bubble_size), stroke)
+            hline(right + bubble_size, x + w, mid)
+        else:
+            hline(right, x + w, mid)
 
     def _draw_logic_gates_page(self, screen, content):
         self.buttons = []
@@ -884,6 +921,7 @@ class DetectiveNotebook:
 
         wire = (55, 125, 151)
         cyan = CYAN
+        pad = 10                                   # blue mini-square size
         input_w = min(94, max(75, int(circuit_w * 0.19)))
         input_h = 35
         ax = circuit_rect.x + 14
@@ -914,38 +952,48 @@ class DetectiveNotebook:
         symbol_rect = pygame.Rect(gate_x, gate_y, gate_w, gate_h)
         pin_mid = gate_y + gate_h // 2
 
+        # Which input boxes feed which gate pins (NOT: A only, one pin).
         if is_not:
-            # Single input only; one wire and one input pin for NOT.
-            pygame.draw.lines(screen, wire, False,
-                              [(a_rect.right, a_rect.centery),
-                               (gate_x-15, a_rect.centery),
-                               (gate_x-15, pin_mid), (gate_x, pin_mid)], 5)
-            pygame.draw.rect(screen, cyan, (gate_x-4, pin_mid-4, 8, 8))
+            input_pins = [(a_rect, pin_mid)]
         else:
             pin1 = gate_y + gate_h // 3
             pin2 = gate_y + (2 * gate_h) // 3
-            for input_rect, pin_y in ((a_rect, pin1), (b_rect, pin2)):
-                mid_x = gate_x - 15
-                pygame.draw.lines(screen, wire, False,
-                                  [(input_rect.right, input_rect.centery),
-                                   (mid_x, input_rect.centery),
-                                   (mid_x, pin_y), (gate_x, pin_y)], 5)
-                # Square connection pads at the input pins.
-                pygame.draw.rect(screen, cyan, (gate_x-4, pin_y-4, 8, 8))
+            input_pins = [(a_rect, pin1), (b_rect, pin2)]
+
+        # Wires from the input boxes to the gate pins.
+        mid_x = gate_x - 15
+        for input_rect, pin_y in input_pins:
+            pygame.draw.lines(screen, wire, False,
+                              [(input_rect.right, input_rect.centery),
+                               (mid_x, input_rect.centery),
+                               (mid_x, pin_y), (gate_x, pin_y)], 5)
 
         self._draw_gate_symbol(screen, self.selected_gate, symbol_rect, cyan)
+
+        # Blue mini squares, drawn after wires/symbol so they stay on top:
+        # one at the edge of each input box, one at each gate input pin.
+        for input_rect, pin_y in input_pins:
+            pygame.draw.rect(screen, cyan,
+                             (input_rect.right - pad // 2,
+                              input_rect.centery - pad // 2, pad, pad))
+            pygame.draw.rect(screen, cyan,
+                             (gate_x - pad // 2, pin_y - pad // 2, pad, pad))
+
+        # Output wire, output square and lamp.
         output = self._gate_output(self.selected_gate, self.gate_a, self.gate_b)
         lamp_x = circuit_rect.right - 31
-        lamp_y = circuit_rect.centery
+        lamp_y = pin_mid                       # lamp sits level with gate output
         out_start = gate_x + gate_w
-        pygame.draw.lines(screen, wire, False,
-                          [(out_start, pin_mid), (lamp_x-13, pin_mid),
-                           (lamp_x-13, lamp_y), (lamp_x-13, lamp_y)], 5)
-        pygame.draw.rect(screen, cyan, (out_start-4, pin_mid-4, 8, 8))
+        pygame.draw.line(screen, wire, (out_start, pin_mid),
+                         (lamp_x - 17, pin_mid), 5)
+        pygame.draw.rect(screen, cyan,
+                         (out_start - pad // 2, pin_mid - pad // 2, pad, pad))
         pygame.draw.circle(screen, (40, 205, 130) if output else (48, 42, 43),
                            (lamp_x, lamp_y), 17)
         pygame.draw.circle(screen, WHITE, (lamp_x, lamp_y), 18, 3)
-        self._text(screen, "OUTPUT", lamp_x-29, lamp_y+22, MUTED, self.small_font)
+        out_label = self.small_font.render("OUTPUT", False, MUTED)
+        screen.blit(out_label,
+                    out_label.get_rect(midtop=(lamp_x, lamp_y + 22)))
 
         # Compact truth table: NOT has A/Y and exactly two rows.
         table_x = circuit_rect.right + 13
