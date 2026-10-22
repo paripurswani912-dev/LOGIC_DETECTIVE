@@ -29,6 +29,99 @@
 import math
 import pygame
 
+def draw_pixel_gate_symbol(surface, gate, rect, color, scale=None):
+    """Pixel-art logic gate drawn on a tiny grid and scaled up with
+    hard pixel edges. Fills `rect`: input stubs reach the left edge,
+    the output stub reaches the right edge."""
+    rect = pygame.Rect(rect)
+    sc = scale or max(1, min(rect.w // 34, rect.h // 22))
+    vw, vh = rect.w // sc, rect.h // sc          # tiny-grid size
+    g = pygame.Surface((vw, vh), pygame.SRCALPHA)
+
+    cy = vh // 2
+    top = round(vh * 0.18)
+    bot = 2 * cy - top
+
+    def P(px, py):
+        px, py = int(round(px)), int(round(py))
+        if 0 <= px < vw and 0 <= py < vh:
+            g.set_at((px, py), color)
+
+    def line(x0, y0, x1, y1):
+        n = int(max(abs(x1 - x0), abs(y1 - y0)) * 2) + 1
+        for i in range(n + 1):
+            t = i / n
+            P(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)
+
+    def bez(p0, p1, p2):
+        for i in range(401):
+            t = i / 400
+            a, b, c = (1 - t) ** 2, 2 * t * (1 - t), t * t
+            P(a*p0[0] + b*p1[0] + c*p2[0], a*p0[1] + b*p1[1] + c*p2[1])
+
+    def arc(cx, cyy, r, a0, a1):
+        for i in range(721):
+            a = math.radians(a0 + (a1 - a0) * i / 720)
+            P(cx + r * math.cos(a), cyy + r * math.sin(a))
+
+    # input pin rows (1/3 and 2/3 of the box, like Workbench.in_pin)
+    pin_off = (rect.h / 6) / sc
+    in_top = round(cy - pin_off)
+    in_bot = 2 * cy - in_top
+
+    xor = gate in ("XOR", "XNOR")
+    bubble = gate in ("NAND", "NOR", "XNOR", "NOT")
+    left = round(vw * 0.17) + (3 if xor else 0)
+    if gate == "NOT":
+        left = round(vw * 0.20)
+
+    if gate == "NOT":
+        tip = left + 16
+        line(left, top, left, bot)
+        line(left, top, tip, cy)
+        line(left, bot, tip, cy)
+        line(0, cy, left, cy)
+
+    elif gate in ("AND", "NAND"):
+        r = cy - top
+        xc = left + 8
+        tip = xc + r
+        line(left, top, left, bot)
+        line(left, top, xc, top)
+        line(left, bot, xc, bot)
+        arc(xc, cy, r, -90, 90)
+        line(0, in_top, left, in_top)
+        line(0, in_bot, left, in_bot)
+
+    else:  # OR family
+        tip = left + 16
+        bez((left, top), (left + 10, top), (tip, cy))
+        bez((left, bot), (left + 10, bot), (tip, cy))
+        bez((left, top), (left + 6, cy), (left, bot))
+
+        def back_x(base, yy):
+            t = (yy - top) / (bot - top)
+            return base + 12 * t * (1 - t)
+
+        base = left
+        if xor:
+            base = left - 3
+            bez((base, top), (base + 6, cy), (base, bot))
+        line(0, in_top, back_x(base, in_top), in_top)
+        line(0, in_bot, back_x(base, in_bot), in_bot)
+
+    out = tip
+    if bubble:                                   # hollow square bubble
+        line(tip + 1, cy - 2, tip + 5, cy - 2)
+        line(tip + 1, cy + 2, tip + 5, cy + 2)
+        line(tip + 1, cy - 2, tip + 1, cy + 2)
+        line(tip + 5, cy - 2, tip + 5, cy + 2)
+        out = tip + 6
+    line(out, cy, vw - 1, cy)
+
+    big = pygame.transform.scale(g, (vw * sc, vh * sc))
+    surface.blit(big, (rect.x + (rect.w - vw * sc) // 2,
+                       rect.y + (rect.h - vh * sc) // 2))
 # ------------------------------------------------------------
 # Colours (match the Level 1 monitor look)
 # ------------------------------------------------------------
@@ -619,11 +712,8 @@ class Workbench:
                 screen.blit(text, text.get_rect(center=centre))
 
         else:  # gate
-            border = YELLOW if self.moving == comp.id else CYAN
-            pygame.draw.rect(screen, BOX_FILL, r)
-            pygame.draw.rect(screen, border, r, 3)
-            text = _font(20).render(comp.kind, False, ORANGE)
-            screen.blit(text, text.get_rect(center=r.center))
+            colour = YELLOW if self.moving == comp.id else CYAN
+            draw_pixel_gate_symbol(screen, comp.kind, r, colour)
 
         if comp.sub:
             sub = _font(12).render(comp.sub, False, GREY)
