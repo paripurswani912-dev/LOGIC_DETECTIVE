@@ -172,13 +172,16 @@ class Circuit:
         stack, seen = [start], set()
         while stack:
             cid = stack.pop()
+            # A DFF output is its stored Q value. Do not traverse through
+            # its D input when checking combinational dependencies; this
+            # is what permits feedback paths that cross a flip-flop.
+            if self.comps[cid].kind == "DFF":
+                continue
             if cid == target:
                 return True
             if cid in seen:
                 continue
             seen.add(cid)
-            if self.comps[cid].kind == "DFF":
-                continue
             for pin in range(self.comps[cid].n_inputs):
                 src = self.source_of(cid, pin)
                 if src is not None:
@@ -187,11 +190,15 @@ class Circuit:
 
     def connect(self, src, dst, pin):
         """Returns (ok, message)."""
+        if src not in self.comps or dst not in self.comps:
+            return False, "That component no longer exists."
+        if not 0 <= pin < self.comps[dst].n_inputs:
+            return False, "That input pin does not exist."
         if src == dst and self.comps[src].kind != "DFF":
             return False, "A component can't feed itself."
         if not self.comps[src].has_output:
             return False, "That part has no output."
-        if self._depends_on(src, dst):
+        if src != dst and self._depends_on(src, dst):
             return False, "That would create a loop."
         self.disconnect(dst, pin)
         self.wires.append((src, dst, pin))
