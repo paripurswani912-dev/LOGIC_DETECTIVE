@@ -1,347 +1,540 @@
 
-import random
+# Level 3: Memory Protocol — Security Network
+# Uses the shared screen_borders.py monitor frame.
+#
+# Controls:
+#   A / B / C / D = Probe the security system
+#   R             = Reset the lamp
+#   H             = Show a hint
+#   ENTER         = Return to the lab after completing the level
+
 import pygame
-import settings
-from puzzles.base_puzzle import BasePuzzle
+from .base_puzzle import BasePuzzle
+from screen_borders import draw_pixel_monitor
+
+
+# ---------------------------------------------------------
+# COLOURS
+# ---------------------------------------------------------
+
+DARK_BLUE = (4, 10, 22)
+PANEL_BLUE = (9, 24, 39)
+CYAN = (0, 235, 245)
+TEAL = (39, 91, 113)
+RED = (255, 57, 70)
+AMBER = (255, 181, 35)
+BLUE = (70, 140, 255)
+VIOLET = (180, 105, 245)
+ORANGE = (255, 100, 30)
+GREEN = (55, 245, 135)
+WHITE = (220, 233, 245)
+GREY = (132, 151, 174)
+YELLOW = (255, 195, 50)
 
 
 class MemoryProtocolPuzzle(BasePuzzle):
-    """
-    FSM-based security panel.
+    """Deduce the hidden security system using the state lamp."""
 
-    - Eight physical-style toggle switches
-    - Four randomly selected target colors
-    - Randomized switch positions
-    - Correct activation advances the FSM
-    - Incorrect activation resets the FSM to S0
-    """
+    MAX_TRIPS = 3
+    INPUTS = ["A", "B", "C", "D"]
+
+    # State: (lamp colour, pulsating?, visible label)
+    LAMPS = {
+        "S0": (RED, False, "RED"),
+        "S1": (AMBER, False, "AMBER"),
+        "S2": (AMBER, True, "AMBER*"),
+        "S3": (BLUE, False, "BLUE"),
+        "S4": (BLUE, True, "BLUE*"),
+        "S5": (VIOLET, False, "VIOLET"),
+        "OPEN": (GREEN, False, "GREEN"),
+        "ALARM": (ORANGE, True, "ALARM"),
+    }
+
+    # Hidden transition rules. The solution is not shown to players.
+    TRANSITIONS = {
+        "S0": {"A": "S1", "B": "S0", "C": "ALARM", "D": "ALARM"},
+        "S1": {"A": "ALARM", "B": "S2", "C": "S0", "D": "S1"},
+        "S2": {"A": "S3", "B": "S1", "C": "ALARM", "D": "S0"},
+        "S3": {"A": "S0", "B": "ALARM", "C": "S4", "D": "S3"},
+        "S4": {"A": "ALARM", "B": "S2", "C": "S3", "D": "S5"},
+        "S5": {"A": "ALARM", "B": "S1", "C": "OPEN", "D": "ALARM"},
+    }
+
+    CLUES = [
+        "1. There are RED, AMBER, BLUE, VIOLET, and GREEN lamps. Watch carefully!",
+        "2. Steady or pulsating? A steady lamp means the first state of that colour. A pulsating lamp means the second state. Remember, two lamps can share the same colour!",
+        "3. My bad habit: I have never pressed the same button twice in a row. Be careful!",
+        "4. Stay alert, detective! Wrong moves trigger an ALARM. Three alarms will wipe your notebook.",
+        "TIP: Press H anytime for a hint. Use your notebook to track what you discover!",
+    ]
+
+    HINTS = [
+        "Hint: watch the lamp after every button press and record the changes.",
+        "Hint: steady and pulsating lamps of the same colour are different states.",
+        "Hint: use your notebook to track what each button does from each state.",
+    ]
+
+    KEYMAP = {
+        pygame.K_a: "A",
+        pygame.K_b: "B",
+        pygame.K_c: "C",
+        pygame.K_d: "D",
+    }
 
     def __init__(self):
         super().__init__()
 
-        self.title_font = pygame.font.Font(None, 46)
-        self.heading_font = pygame.font.Font(None, 29)
-        self.font = pygame.font.Font(None, 24)
-        self.small_font = pygame.font.Font(None, 20)
+        self.state = "S0"
+        self.message = "DETECTIVE, PROBE THE KEYPAD AND TRACK THE LAMP."
+        self.known = {}
+        self.notebook = []
+        self.trail = ["RED"]
+        self.trips = 0
+        self.presses = 0
+        self.hint_index = 0
+        self.awaiting_exit_confirmation = False
 
-        self.switch_colors = {
-            "RED": (235, 75, 75),
-            "BLUE": (70, 150, 245),
-            "GREEN": (70, 210, 120),
-            "YELLOW": (245, 205, 75),
-            "PURPLE": (175, 105, 230),
-            "ORANGE": (245, 145, 65),
-            "CYAN": (70, 220, 230),
-            "WHITE": (225, 230, 240),
-        }
+    # ---------------------------------------------------------
+    # GAME LOGIC
+    # ---------------------------------------------------------
 
-        self.panel_rect = pygame.Rect(90, 175, 820, 310)
-        self.switch_rects = {}
-        self.switches = {}
-        self.state_number = 0
-        self.message_color = settings.WHITE
+    def name(self, state):
+        return self.LAMPS[state][2]
 
-        self.start_new_attempt()
+    def add_trail(self, text):
+        self.trail.append(text)
+        self.trail = self.trail[-8:]
 
-    def start_new_attempt(self):
-        """Generate a new sequence and a new switch arrangement."""
+    def press(self, inp):
+        if self.solved or self.awaiting_exit_confirmation:
+            return
 
-        all_colors = list(self.switch_colors.keys())
+        self.presses += 1
 
-        # Four different colors form the required sequence.
-        self.sequence = random.sample(all_colors, 4)
+        # After an alarm, the next button press reboots the system.
+        if self.state == "ALARM":
+            self.state = "S0"
+            self.add_trail("RED")
+            self.message = f"SYSTEM REBOOTED BY BUTTON {inp}. LAMP: RED."
+            return
 
-        # All eight switches appear in a randomized arrangement.
-        self.switch_order = all_colors[:]
-        random.shuffle(self.switch_order)
+        old_state = self.state
+        key = (old_state, inp)
+        next_state = self.TRANSITIONS[old_state][inp]
 
-        self.switches = {
-            color: False for color in all_colors
-        }
-
-        self.switch_rects = {}
-
-        # Four switches per row.
-        start_x = 125
-        start_y = 225
-        switch_w = 165
-        switch_h = 105
-        gap_x = 30
-        gap_y = 35
-
-        for index, color in enumerate(self.switch_order):
-            row = index // 4
-            column = index % 4
-
-            x = start_x + column * (switch_w + gap_x)
-            y = start_y + row * (switch_h + gap_y)
-
-            self.switch_rects[color] = pygame.Rect(
-                x, y, switch_w, switch_h
+        # Record each discovered transition once.
+        if key not in self.known:
+            self.known[key] = next_state
+            self.notebook.append(
+                f"{self.name(old_state)} --{inp}--> {self.name(next_state)}"
             )
 
-        self.state_number = 0
-        self.solved = False
+        self.state = next_state
+        self.add_trail(self.name(next_state))
         self.message = (
-            "Read the maintenance record, then activate the switches."
+            f"{self.name(old_state)} + {inp} -> {self.name(next_state)}"
         )
-        self.message_color = settings.WHITE
+
+        if next_state == "ALARM":
+            self.trips += 1
+            self.message = (
+                f"ALARM! COUNT: {self.trips}/{self.MAX_TRIPS}. "
+                "PRESS ANY BUTTON TO REBOOT."
+            )
+
+            if self.trips >= self.MAX_TRIPS:
+                self.known.clear()
+                self.notebook.clear()
+                self.trips = 0
+                self.message = (
+                    "TRACE COMPLETE! YOUR NOTEBOOK WAS WIPED. "
+                    "START MAPPING AGAIN."
+                )
+
+        elif next_state == "OPEN":
+            self.awaiting_exit_confirmation = True
+            self.message = "ACCESS GRANTED! SECURITY NETWORK UNLOCKED."
+
+    def reset_lamp(self):
+        if self.solved or self.awaiting_exit_confirmation:
+            return
+
+        self.state = "S0"
+        self.add_trail("RED")
+        self.message = "MANUAL RESET: LAMP IS RED."
+
+    def show_hint(self):
+        if self.solved or self.awaiting_exit_confirmation:
+            return
+
+        self.message = self.HINTS[
+            self.hint_index % len(self.HINTS)
+        ]
+        self.hint_index += 1
 
     def handle_event(self, event):
-        if self.solved:
+        # Keyboard only. Mouse clicks are ignored.
+        if event.type != pygame.KEYDOWN:
             return
 
-        # Click a switch with the mouse.
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 1:
-                for color, rect in self.switch_rects.items():
-                    if rect.collidepoint(event.pos):
-                        self.toggle_switch(color)
-                        return
-
-        # Keyboard shortcuts: 1 to 8 correspond to the displayed
-        # switch positions, reading left-to-right, top-to-bottom.
-        if event.type == pygame.KEYDOWN:
-            if pygame.K_1 <= event.key <= pygame.K_8:
-                index = event.key - pygame.K_1
-
-                if index < len(self.switch_order):
-                    color = self.switch_order[index]
-                    self.toggle_switch(color)
-
-            elif event.key == pygame.K_r:
-                # Retry with a newly randomized sequence and layout.
-                self.start_new_attempt()
-
-    def toggle_switch(self, color):
-        """Flip a lever and process its ON activation."""
-
-        if self.solved:
-            return
-
-        # Turn the physical-style switch ON or OFF.
-        self.switches[color] = not self.switches[color]
-
-        # Turning a switch OFF does not count as an FSM input.
-        if not self.switches[color]:
-            self.message = f"{color} switch turned OFF."
-            self.message_color = settings.GREY
-            return
-
-        expected_color = self.sequence[self.state_number]
-
-        if color == expected_color:
-            self.state_number += 1
-
-            if self.state_number == len(self.sequence):
+        if self.awaiting_exit_confirmation:
+            if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                 self.solved = True
-                self.message = (
-                    "ACCESS GRANTED! FSM reached the final state."
-                )
-                self.message_color = settings.GREEN
-            else:
-                next_color = self.sequence[self.state_number]
-                self.message = (
-                    f"Correct! FSM advanced to S{self.state_number}. "
-                    f"Next required signal: {next_color}."
-                )
-                self.message_color = settings.GREEN
+            return
 
-        else:
-            # Incorrect input: FSM returns to its initial state.
-            self.state_number = 0
+        if self.solved:
+            return
 
-            # Security reset returns every lever to OFF.
-            for switch_color in self.switches:
-                self.switches[switch_color] = False
+        if event.key in self.KEYMAP:
+            self.press(self.KEYMAP[event.key])
+        elif event.key == pygame.K_r:
+            self.reset_lamp()
+        elif event.key == pygame.K_h:
+            self.show_hint()
 
-            self.message = (
-                f"WRONG INPUT: {color}! FSM reset to S0. "
-                "All switches reset. Try again."
+    # ---------------------------------------------------------
+    # DRAWING HELPERS
+    # ---------------------------------------------------------
+
+    def _font(self, size, bold=False):
+        return pygame.font.SysFont("monospace", size, bold=bold)
+
+    def _text(self, screen, text, font, colour, x, y):
+        image = font.render(str(text), True, colour)
+        screen.blit(image, (int(x), int(y)))
+        return image.get_width(), image.get_height()
+
+    def _wrap(self, text, font, max_width):
+        """Wrap text to fit the available width."""
+        words = text.split()
+        lines = []
+        current = ""
+
+        for word in words:
+            candidate = word if not current else current + " " + word
+
+            if font.size(candidate)[0] <= max_width:
+                current = candidate
+                continue
+
+            if current:
+                lines.append(current)
+
+            # Split unusually long words if necessary.
+            current = ""
+            for char in word:
+                candidate = current + char
+
+                if font.size(candidate)[0] <= max_width:
+                    current = candidate
+                else:
+                    if current:
+                        lines.append(current)
+                    current = char
+
+        if current:
+            lines.append(current)
+
+        return lines
+
+    def _wrapped_text(
+        self, screen, text, font, colour, x, y,
+        max_width, line_height, max_height
+    ):
+        """Draw wrapped text only while it fits vertically and horizontally."""
+        used_height = 0
+
+        for line in self._wrap(text, font, max_width):
+            if used_height + line_height > max_height:
+                break
+
+            self._text(
+                screen, line, font, colour,
+                x, y + used_height
             )
-            self.message_color = settings.RED
+            used_height += line_height
 
-    def update(self, dt):
-        pass
+        return used_height
+
+    def _panel(self, screen, rect, title, title_font):
+        pygame.draw.rect(screen, PANEL_BLUE, rect, border_radius=12)
+        pygame.draw.rect(screen, TEAL, rect, 3, border_radius=12)
+
+        self._text(
+            screen, title, title_font, CYAN,
+            rect.x + 16, rect.y + 13
+        )
+
+    # ---------------------------------------------------------
+    # MAIN DRAW
+    # ---------------------------------------------------------
 
     def draw(self, screen):
-        screen.fill(settings.DARK_BLUE)
+        screen.fill(DARK_BLUE)
 
-        # Title
-        title = self.title_font.render(
-            "MEMORY PROTOCOL", True, settings.CYAN
-        )
-        screen.blit(
-            title, title.get_rect(center=(500, 45))
+        # Shared Level 1 pixel-art monitor border.
+        panel = draw_pixel_monitor(screen)
+
+        sx = panel.width / 1400
+        sy = panel.height / 880
+        scale = max(0.65, min(sx, sy, 1.2))
+
+        def X(value):
+            return int(panel.x + value * sx)
+
+        def Y(value):
+            return int(panel.y + value * sy)
+
+        def W(value):
+            return max(1, int(value * sx))
+
+        def H(value):
+            return max(1, int(value * sy))
+
+        alert_font = self._font(max(14, int(19 * scale)), True)
+        intro_font = self._font(max(17, int(25 * scale)), True)
+        title_font = self._font(max(14, int(19 * scale)), True)
+
+        # Slightly larger text inside the notes and notebook.
+        notes_font = self._font(max(14, int(17 * scale)))
+        notebook_font = self._font(max(14, int(17 * scale)))
+
+        stat_font = self._font(max(14, int(17 * scale)), True)
+        button_font = self._font(max(14, int(17 * scale)), True)
+        message_font = self._font(max(13, int(16 * scale)), True)
+        completion_font = self._font(max(20, int(27 * scale)), True)
+
+        # -----------------------------------------------------
+        # BLINKING SECURITY ALERT
+        # -----------------------------------------------------
+
+        blink_on = (pygame.time.get_ticks() // 450) % 2 == 0
+        alert_colour = RED if blink_on else (135, 35, 48)
+
+        self._text(
+            screen,
+            "■ SECURITY NETWORK // LEVEL THREE",
+            alert_font,
+            alert_colour,
+            X(35), Y(25)
         )
 
-        subtitle = self.small_font.render(
-            "NEXUS-9 SECURITY CONTROL PANEL",
-            True, settings.GREY
-        )
-        screen.blit(
-            subtitle, subtitle.get_rect(center=(500, 82))
+        # -----------------------------------------------------
+        # INTRODUCTION
+        # -----------------------------------------------------
+
+        intro = (
+            "Oops! Seems like the guard of this facility has left "
+            "something behind. Can you understand what's in it?"
         )
 
-        # Temporary maintenance record.
-        # Later, this can be moved into the document/notes system.
-        record_title = self.heading_font.render(
-            "MAINTENANCE RECORD — REQUIRED SIGNALS",
-            True, settings.YELLOW
-        )
-        screen.blit(
-            record_title, record_title.get_rect(center=(500, 125))
+        self._wrapped_text(
+            screen, intro, intro_font, CYAN,
+            X(35), Y(67),
+            W(1325), H(33), H(75)
         )
 
-        record_text = "  ->  ".join(self.sequence)
-        record = self.font.render(
-            record_text, True, settings.WHITE
+        # -----------------------------------------------------
+        # ENLARGED, MATCHING NOTES AND NOTEBOOK PANELS
+        # -----------------------------------------------------
+
+        # Both panels have exactly the same height.
+        # The extra height makes room for the H-key tip and line spacing.
+        panel_top = Y(155)
+        panel_height = H(350)
+
+        notes_rect = pygame.Rect(
+            X(35), panel_top, W(745), panel_height
         )
-        screen.blit(
-            record, record.get_rect(center=(500, 153))
+        notebook_rect = pygame.Rect(
+            X(800), panel_top, W(565), panel_height
         )
 
-        # Control panel
-        pygame.draw.rect(
-            screen, settings.PANEL_BLUE,
-            self.panel_rect, border_radius=12
-        )
-        pygame.draw.rect(
-            screen, settings.GREY,
-            self.panel_rect, width=2, border_radius=12
-        )
+        self._panel(screen, notes_rect, "GUARD'S NOTES", title_font)
+        self._panel(screen, notebook_rect, "YOUR NOTEBOOK", title_font)
 
-        # Eight switches
-        for index, color in enumerate(self.switch_order):
-            rect = self.switch_rects[color]
-            color_value = self.switch_colors[color]
-            is_on = self.switches[color]
+        # Guard's notes: larger type and additional space between points.
+        notes_x = notes_rect.x + W(16)
+        notes_y = notes_rect.y + H(49)
+        notes_width = notes_rect.width - W(32)
+        notes_bottom = notes_rect.bottom - H(12)
 
-            # Switch housing
-            pygame.draw.rect(
-                screen, settings.DARK_BLUE,
-                rect, border_radius=9
+        note_line_height = H(22)
+        note_gap = H(7)
+
+        for index, note in enumerate(self.CLUES):
+            available = notes_bottom - notes_y
+
+            if available <= 0:
+                break
+
+            used = self._wrapped_text(
+                screen, note, notes_font, WHITE,
+                notes_x, notes_y,
+                notes_width, note_line_height, available
             )
-            pygame.draw.rect(
-                screen, color_value if is_on else settings.GREY,
-                rect, width=2, border_radius=9
-            )
 
-            # Color indicator
-            indicator_center = (rect.centerx, rect.y + 22)
-            indicator_color = (
-                color_value if is_on else (65, 75, 90)
-            )
+            notes_y += used + note_gap
 
-            pygame.draw.circle(
-                screen, indicator_color, indicator_center, 8
-            )
+        # Notebook entries: matching panel height, larger type and spacing.
+        book_x = notebook_rect.x + W(16)
+        book_y = notebook_rect.y + H(51)
+        book_width = notebook_rect.width - W(32)
+        book_bottom = notebook_rect.bottom - H(12)
 
-            # Lever base
-            lever_base = pygame.Rect(
-                rect.centerx - 25,
-                rect.y + 38,
-                50, 36
+        if not self.notebook:
+            self._text(
+                screen,
+                "(NO TRANSITIONS RECORDED)",
+                notebook_font, GREY,
+                book_x, book_y
             )
-            pygame.draw.rect(
-                screen, (45, 55, 70),
-                lever_base, border_radius=6
-            )
+        else:
+            for entry in self.notebook[-8:]:
+                available = book_bottom - book_y
 
-            # Lever handle tilts according to ON/OFF state.
-            if is_on:
-                lever_end = (
-                    rect.centerx + 13, rect.y + 43
+                if available <= 0:
+                    break
+
+                used = self._wrapped_text(
+                    screen, entry, notebook_font, WHITE,
+                    book_x, book_y, book_width,
+                    H(22), available
                 )
-            else:
-                lever_end = (
-                    rect.centerx - 13, rect.y + 68
-                )
 
-            pygame.draw.line(
-                screen, color_value,
-                (rect.centerx, rect.y + 58),
-                lever_end, 7
-            )
-            pygame.draw.circle(
-                screen, color_value, lever_end, 7
-            )
+                book_y += used + H(5)
 
-            # Switch label and state
-            label = self.small_font.render(
-                f"{index + 1}. {color}",
-                True, settings.WHITE
-            )
-            screen.blit(
-                label,
-                label.get_rect(
-                    center=(rect.centerx, rect.bottom - 21)
-                )
-            )
+        # -----------------------------------------------------
+        # STATE LAMP AND STATISTICS
+        # -----------------------------------------------------
 
-            state_label = "ON" if is_on else "OFF"
-            state_color = color_value if is_on else settings.GREY
-
-            state_text = self.small_font.render(
-                state_label, True, state_color
-            )
-            screen.blit(
-                state_text,
-                state_text.get_rect(
-                    center=(rect.centerx, rect.bottom + 12)
-                )
-            )
-
-        # FSM progress
-        fsm_y = 530
-        fsm_label = self.font.render(
-            "FSM STATE:", True, settings.WHITE
+        self._text(
+            screen, "STATE LAMP",
+            notes_font, GREY,
+            X(35), Y(520)
         )
-        screen.blit(fsm_label, (110, fsm_y))
 
-        for state in range(5):
-            state_rect = pygame.Rect(
-                260 + state * 90, fsm_y - 5, 68, 32
-            )
+        colour, pulsing, label = self.LAMPS[self.state]
 
-            if state < self.state_number:
-                state_color = settings.GREEN
-            elif state == self.state_number:
-                state_color = settings.CYAN
-            else:
-                state_color = settings.GREY
+        if pulsing and (pygame.time.get_ticks() // 350) % 2:
+            colour = tuple(int(c * 0.35) for c in colour)
 
-            pygame.draw.rect(
-                screen, state_color,
-                state_rect, width=2, border_radius=5
-            )
+        # Enlarged lamp circle.
+        lamp_center = (X(175), Y(615))
+        lamp_radius = max(31, int(55 * scale))
 
-            state_text = self.small_font.render(
-                f"S{state}", True, settings.WHITE
-            )
-            screen.blit(
-                state_text,
-                state_text.get_rect(center=state_rect.center)
-            )
-
-        # Message
-        message = self.small_font.render(
-            self.message, True, self.message_color
+        pygame.draw.circle(screen, colour, lamp_center, lamp_radius)
+        pygame.draw.circle(
+            screen, WHITE, lamp_center,
+            lamp_radius + 4, max(2, int(3 * scale))
         )
+
+        stats_x = X(300)
+        stats_y = Y(540)
+        stat_gap = H(32)
+
+        self._text(
+            screen, f"LAMP: {label}",
+            stat_font, WHITE, stats_x, stats_y
+        )
+        self._text(
+            screen, f"ALARM COUNT: {self.trips}/{self.MAX_TRIPS}",
+            notes_font, YELLOW, stats_x, stats_y + stat_gap
+        )
+        self._text(
+            screen, f"BUTTONS PRESSED: {self.presses}",
+            notes_font, WHITE, stats_x, stats_y + stat_gap * 2
+        )
+
+        total = sum(len(row) for row in self.TRANSITIONS.values())
+        self._text(
+            screen, f"TRANSITIONS MAPPED: {len(self.known)}/{total}",
+            notes_font, GREY, stats_x, stats_y + stat_gap * 3
+        )
+
+        # Reset label — keyboard control is R.
+        reset_rect = pygame.Rect(
+            X(1000), Y(550), W(330), H(58)
+        )
+
+        pygame.draw.rect(screen, PANEL_BLUE, reset_rect)
+        pygame.draw.rect(screen, YELLOW, reset_rect, 3)
+
+        reset_label = button_font.render("RESET LAMP  R", True, YELLOW)
         screen.blit(
-            message, message.get_rect(center=(500, 585))
+            reset_label,
+            reset_label.get_rect(center=reset_rect.center)
         )
 
-        instructions = self.small_font.render(
-            "Click a lever or press 1-8 to toggle it. "
-            "Press R for a new attempt.",
-            True, settings.GREY
-        )
-        screen.blit(
-            instructions,
-            instructions.get_rect(center=(500, 620))
-        )
+        # -----------------------------------------------------
+        # KEYPAD
+        # -----------------------------------------------------
 
-    def reset_attempt(self):
-        super().reset_attempt()
-        self.start_new_attempt()
+        # Kept above the status area to prevent overlap.
+        keypad_y = Y(690)
+        keypad_h = H(57)
+        keypad_left = X(35)
+        keypad_right = X(1365)
+        keypad_gap = W(15)
+
+        button_width = (
+            keypad_right - keypad_left - keypad_gap * 3
+        ) // 4
+
+        for index, letter in enumerate(self.INPUTS):
+            rect = pygame.Rect(
+                keypad_left + index * (button_width + keypad_gap),
+                keypad_y,
+                button_width,
+                keypad_h
+            )
+
+            pygame.draw.rect(screen, PANEL_BLUE, rect)
+            pygame.draw.rect(screen, CYAN, rect, 3)
+
+            # Only BUTTON A, BUTTON B, BUTTON C, BUTTON D.
+            label = button_font.render(f"BUTTON {letter}", True, CYAN)
+            screen.blit(label, label.get_rect(center=rect.center))
+
+        # -----------------------------------------------------
+        # STATUS AND COMPLETION MESSAGE
+        # -----------------------------------------------------
+
+        # Reserved area below the keypad, still inside the monitor.
+        status_x = X(35)
+        status_y = Y(765)
+        status_width = W(1330)
+        status_height = H(95)
+
+        if self.awaiting_exit_confirmation:
+            completion_rect = pygame.Rect(
+                status_x, status_y,
+                status_width, status_height
+            )
+            pygame.draw.rect(screen, DARK_BLUE, completion_rect)
+
+            self._text(
+                screen, "ACCESS GRANTED!",
+                completion_font, GREEN,
+                status_x, status_y
+            )
+
+            self._text(
+                screen, "YOU CRACKED THE SECURITY NETWORK, DETECTIVE!",
+                message_font, WHITE,
+                status_x, status_y + H(33)
+            )
+
+            self._text(
+                screen, "PRESS ENTER TO RETURN TO THE LAB",
+                message_font, YELLOW,
+                status_x, status_y + H(63)
+            )
+        else:
+            self._wrapped_text(
+                screen, self.message, message_font, YELLOW,
+                status_x, status_y,
+                status_width, H(23), status_height
+            )
+
+        pygame.display.update()
