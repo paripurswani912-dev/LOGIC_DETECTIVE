@@ -25,14 +25,14 @@ def gray_to_bin(bits):
 
 def _make_circuit():
     c = Circuit()
-    rows = [0.13, 0.38, 0.62, 0.87]
+    rows = [0.12, 0.37, 0.61, 0.85]
     for gid, bid, ry in zip(G_IDS, B_IDS, rows):
         c.add(Component(gid, "SWITCH", 0.08, ry, gid))
         c.add(Component(bid, "LED", 0.92, ry, bid))
     # Pre-placed XOR gates; the player only draws the wires.
-    c.add(Component("X2", "XOR", 0.34, 0.38))
-    c.add(Component("X1", "XOR", 0.54, 0.62))
-    c.add(Component("X0", "XOR", 0.74, 0.87))
+    c.add(Component("X2", "XOR", 0.30, rows[1]))
+    c.add(Component("X1", "XOR", 0.50, rows[2]))
+    c.add(Component("X0", "XOR", 0.70, rows[3]))
     return c
 
 
@@ -50,7 +50,7 @@ class HiddenTransmissionCircuitMixin:
     def start_build_phase(self):
         self.phase = "BUILD"
         self.build_message = (
-            "ALL DECODED! NOW AUTOMATE IT: build a Gray-to-Binary "
+            "ALL DECODED! NOW AUTOMATE IT: Build a Gray-to-Binary "
             "converter from the XOR gates."
         )
 
@@ -110,7 +110,7 @@ class HiddenTransmissionCircuitMixin:
         if int(self.elapsed_time * 2.5) % 2 == 0:
             pygame.draw.rect(screen, RED, (left, y + 4, 8, 8))
             alert = self._fit_text(
-                "SIGNAL INTERCEPTED // LEVEL TWO // BUILD",
+                "SIGNAL INTERCEPTED // LEVEL TWO",
                 width - 20, 16, RED,
             )
             screen.blit(alert, (left + 19, y))
@@ -122,7 +122,7 @@ class HiddenTransmissionCircuitMixin:
         y += title.get_height() + 8
 
         for text in (
-            "B3 = G3   |   B2 = B3 XOR G2   |   B1 = B2 XOR G1   "
+            "Rules: B3 = G3   |   B2 = B3 XOR G2   |   B1 = B2 XOR G1   "
             "|   B0 = B1 XOR G0",
             "Drag from an OUTPUT pin (right) to an INPUT pin (left). "
             "Right-click an input pin to remove a wire.",
@@ -132,7 +132,7 @@ class HiddenTransmissionCircuitMixin:
             y += 22
         y += 8
 
-        area_h = max(260, panel.bottom - y - 85)
+        area_h = max(260, panel.bottom - y - 75)
         self.build.area = pygame.Rect(left, y, int(width * 0.68), area_h)
         self.build.draw(screen)
 

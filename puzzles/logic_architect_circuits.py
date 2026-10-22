@@ -28,6 +28,32 @@ def _make_build_circuit():
     c.add(Component("Y", "LED", 0.92, 0.50, "F"))
     return c
 
+def segments_overlap(a, b, c, d):
+    """Return True if two horizontal/vertical segments overlap."""
+    if a[1] == b[1] == c[1] == d[1]:  # Horizontal
+        if a[1] != c[1]:
+            return False
+        return max(min(a[0], b[0]), min(c[0], d[0])) < min(
+            max(a[0], b[0]), max(c[0], d[0])
+        )
+
+    if a[0] == b[0] == c[0] == d[0]:  # Vertical
+        if a[0] != c[0]:
+            return False
+        return max(min(a[1], b[1]), min(c[1], d[1])) < min(
+            max(a[1], b[1]), max(c[1], d[1])
+        )
+
+    return False
+
+
+def wire_conflicts(new_segments, existing_segments):
+    """Reject a wire if it overlaps an existing wire."""
+    for new_a, new_b in new_segments:
+        for old_a, old_b in existing_segments:
+            if segments_overlap(new_a, new_b, old_a, old_b):
+                return True
+    return False
 
 class LogicArchitectCircuitMixin:
 
@@ -176,7 +202,7 @@ class LogicArchitectCircuitMixin:
 
         # Blinking alert
         if (pygame.time.get_ticks() // 500) % 2 == 0:
-            alert = "VAULT ALARM PUZZLE // LEVEL FIVE // BUILD THE CIRCUIT"
+            alert = "VAULT ALARM PUZZLE // LEVEL FIVE"
             y = panel.y + int(ph * 0.035)
             font = self.fit_font(
                 alert, max(18, int(panel.width * 0.018)), width - 40

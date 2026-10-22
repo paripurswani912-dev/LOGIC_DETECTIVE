@@ -14,20 +14,77 @@
 #   - Drag a gate body ........... move it
 #   - Right-click a gate body .... delete it (and its wires)
 #
-# NEW for sequential circuits (Level 6+):
+# allow_moving=True:
+#   - Drag ANY part by its body to move it (a plain click still flips
+#     switches / sets flip-flop seeds).
+#
+# Sequential circuits (Level 6+):
 #   - "DFF" component: D input, Q output, shared implicit clock.
 #   - circuit.clock() ............ updates ALL flip-flops at once.
-#   - Flip-flops break combinational loops, so feedback wires
-#     (Q5 -> XOR -> D1) are legal.
-#   - allow_preset=True .......... click a flip-flop to set its seed bit
-#     (only before the first clock pulse).
-#   - circuit.history ............ Q value of every flip-flop per tick,
-#     used for the timing diagram.
-#   - "SOURCE" component: a read-only input whose value the level sets
-#     from code (e.g. the ciphertext bit stream).
+#   - Flip-flops break combinational loops, so feedback wires are legal.
+#   - allow_preset=True .......... click a flip-flop to set its seed bit.
+#   - circuit.history ............ Q value of every flip-flop per tick.
+#   - "SOURCE" component: a read-only input whose value the level sets.
+#
+# Optional per-circuit look & routing (all default to the old behaviour):
+#   circuit.size_scale  : multiplies every component's size (e.g. 0.75)
+#   circuit.font_scale  : multiplies every label font size
+#   circuit.wire_colour : one fixed colour for every wire (None = by value)
+#   circuit.channels    : {(src_id, dst_id, pin): channel} manual wire routes
+#       channel = None   -> run along the source pin's own height
+#       channel = "DST"  -> run along the target pin's own height
+#       channel = 0..1   -> run along that fraction of the bench height
+#   circuit.auto_route  : True = every wire finds its own free lane/channel
+#       (avoids parts, captions and other wires; follows moved parts)
 
 import math
 import pygame
+
+WIRE_COLOUR = (70, 150, 175)   # default single wire colour
+
+
+# ------------------------------------------------------------
+# Wire drawing helpers
+# ------------------------------------------------------------
+
+def route_wire(src, dst, channel_y, pin, lane_gap=14, lane_step=8):
+    """
+    src, dst   : (x, y) pixel positions of the output pin and input pin
+    channel_y  : pixel y of this wire's private horizontal channel
+    pin        : 0 or 1, which input pin of the gate (offsets the lane)
+    Returns the list of points to draw as one polyline.
+    """
+    sx, sy = src
+    dx, dy = dst
+
+    # Perfectly aligned: one straight line.
+    if abs(sy - dy) < 2 and sx < dx:
+        return [src, dst]
+
+    lane_out = sx + lane_gap                    # just right of the source pin
+    lane_in = dx - lane_gap - lane_step * pin   # just left of the target pin
+
+    pts = [src,
+           (lane_out, sy),
+           (lane_out, channel_y),
+           (lane_in, channel_y),
+           (lane_in, dy),
+           dst]
+
+    # Drop zero-length segments so corners draw cleanly.
+    out = [pts[0]]
+    for p in pts[1:]:
+        if p != out[-1]:
+            out.append(p)
+    return out
+
+
+def draw_wire(screen, pts, colour=WIRE_COLOUR, width=3):
+    pygame.draw.lines(screen, colour, False, pts, width)
+    for p in pts[1:-1]:                         # round the corners
+        pygame.draw.circle(screen, colour, (int(p[0]), int(p[1])),
+                           max(1, width // 2))
+
 
 def draw_pixel_gate_symbol(surface, gate, rect, color, scale=None):
     """Pixel-art logic gate drawn on a tiny grid and scaled up with
@@ -122,6 +179,8 @@ def draw_pixel_gate_symbol(surface, gate, rect, color, scale=None):
     big = pygame.transform.scale(g, (vw * sc, vh * sc))
     surface.blit(big, (rect.x + (rect.w - vw * sc) // 2,
                        rect.y + (rect.h - vh * sc) // 2))
+
+
 # ------------------------------------------------------------
 # Colours (match the Level 1 monitor look)
 # ------------------------------------------------------------
@@ -157,6 +216,7 @@ _FONTS = {}
 
 
 def _font(size):
+    size = max(8, int(size))
     if size not in _FONTS:
         _FONTS[size] = pygame.font.SysFont("monospace", size, bold=True)
     return _FONTS[size]
@@ -229,6 +289,13 @@ class Circuit:
         self.ticks = 0
         self.history = {}  # dff id -> [Q at tick 0, Q at tick 1, ...]
 
+        # Optional look / routing settings (defaults = old behaviour).
+        self.size_scale = 1.0
+        self.font_scale = 1.0
+        self.wire_colour = None
+        self.channels = {}
+        self.auto_route = False
+
     def add(self, comp):
         self.comps[comp.id] = comp
         return comp
@@ -265,9 +332,6 @@ class Circuit:
         stack, seen = [start], set()
         while stack:
             cid = stack.pop()
-            # A DFF output is its stored Q value. Do not traverse through
-            # its D input when checking combinational dependencies; this
-            # is what permits feedback paths that cross a flip-flop.
             if self.comps[cid].kind == "DFF":
                 continue
             if cid == target:
@@ -410,26 +474,42 @@ class Circuit:
 # ------------------------------------------------------------
 
 class Workbench:
-    PIN = 10  # pin hit radius
+    PIN = 10        # pin hit radius
+    DRAG_PX = 5     # mouse travel that turns a click into a drag
 
     def __init__(self, circuit, allow_wiring=True, allow_placing=False,
-                 allow_preset=False):
+                 allow_preset=False, allow_moving=False):
         self.circuit = circuit
         self.allow_wiring = allow_wiring
         self.allow_placing = allow_placing
         self.allow_preset = allow_preset
+        self.allow_moving = allow_moving
         self.area = pygame.Rect(0, 0, 400, 200)
         self.mouse = (0, 0)
         self.drag_from = None
         self.drag_origin = (0, 0)
-        self.moving = None          # id of the gate being dragged
+        self.moving = None          # id of the part being dragged
+        self.press = None           # (id, pos) of a body press (click or drag)
         self.move_off = (0, 0)
         self._next_id = 1
+
+    # ---- scaling helpers ----
+
+    def _s(self):
+        return getattr(self.circuit, "size_scale", 1.0)
+
+    def _fs(self):
+        return getattr(self.circuit, "font_scale", 1.0)
+
+    def _size(self, comp):
+        w, h = comp.size
+        s = self._s()
+        return (int(w * s), int(h * s))
 
     # ---- geometry ----
 
     def rect_of(self, comp):
-        w, h = comp.size
+        w, h = self._size(comp)
         cx = self.area.x + comp.rx * self.area.w
         cy = self.area.y + comp.ry * self.area.h
         return pygame.Rect(int(cx - w / 2), int(cy - h / 2), w, h)
@@ -459,6 +539,13 @@ class Workbench:
         """Topmost player-placed part under the mouse, or None."""
         for comp in reversed(list(self.circuit.comps.values())):
             if comp.deletable and self.rect_of(comp).collidepoint(pos):
+                return comp
+        return None
+
+    def _body_at(self, pos):
+        """Topmost part (any kind) under the mouse, or None."""
+        for comp in reversed(list(self.circuit.comps.values())):
+            if self.rect_of(comp).collidepoint(pos):
                 return comp
         return None
 
@@ -495,21 +582,47 @@ class Workbench:
         ok, msg = self.circuit.connect(src, hit[1], hit[2])
         return msg
 
+    def _click_comp(self, comp):
+        """A plain click on a part's body (not a drag)."""
+        if comp.kind == "SWITCH":
+            comp.value ^= 1
+            return f"Switch {comp.label} = {comp.value}"
+        if comp.kind == "DFF" and self.allow_preset:
+            if self.circuit.ticks > 0:
+                return "Seed is locked while running. Press RESET."
+            comp.init ^= 1
+            self.circuit.reset()
+            return f"Seed bit {comp.label} = {comp.init}"
+        return ""
+
+    def _drag_to(self, comp, pos):
+        """Move `comp` so it follows the mouse, kept inside the bench
+        (with room underneath for its caption)."""
+        w, h = self._size(comp)
+        cx = pos[0] - self.move_off[0]
+        cy = pos[1] - self.move_off[1]
+        lo_x = (w / 2 + 4) / self.area.w
+        lo_y = (h / 2 + 4) / self.area.h
+        bottom_pad = 26 if self.allow_moving else 4
+        hi_y = 1 - (h / 2 + bottom_pad) / self.area.h
+        hi_y = max(hi_y, lo_y)
+        comp.rx = min(max((cx - self.area.x) / self.area.w, lo_x), 1 - lo_x)
+        comp.ry = min(max((cy - self.area.y) / self.area.h, lo_y), hi_y)
+
     def handle_event(self, event):
         """Returns a short status message (or "")."""
         if event.type == pygame.MOUSEMOTION:
             self.mouse = event.pos
+
+            # A body press turns into a drag once the mouse travels a bit.
+            if self.press is not None and self.moving is None:
+                px, py = self.press[1]
+                if math.hypot(event.pos[0] - px,
+                              event.pos[1] - py) > self.DRAG_PX:
+                    self.moving = self.press[0]
+
             if self.moving in self.circuit.comps and self.area.w > 0:
-                comp = self.circuit.comps[self.moving]
-                w, h = comp.size
-                cx = event.pos[0] - self.move_off[0]
-                cy = event.pos[1] - self.move_off[1]
-                lo_x = (w / 2 + 4) / self.area.w
-                lo_y = (h / 2 + 4) / self.area.h
-                comp.rx = min(max((cx - self.area.x) / self.area.w, lo_x),
-                              1 - lo_x)
-                comp.ry = min(max((cy - self.area.y) / self.area.h, lo_y),
-                              1 - lo_y)
+                self._drag_to(self.circuit.comps[self.moving], event.pos)
             return ""
 
         if event.type == pygame.MOUSEBUTTONDOWN:
@@ -520,6 +633,7 @@ class Workbench:
             if event.button == 3:
                 self.drag_from = None
                 self.moving = None
+                self.press = None
                 if hit and hit[0] == "in":
                     self.circuit.disconnect(hit[1], hit[2])
                     return "Wire removed."
@@ -560,21 +674,32 @@ class Workbench:
                     self.move_off = (pos[0] - r.centerx, pos[1] - r.centery)
                     return ""
 
+            if self.allow_moving:
+                comp = self._body_at(pos)
+                if comp is not None:
+                    r = self.rect_of(comp)
+                    self.press = (comp.id, pos)
+                    self.move_off = (pos[0] - r.centerx, pos[1] - r.centery)
+                    return ""
+
             for comp in self.circuit.comps.values():
-                if not self.rect_of(comp).collidepoint(pos):
-                    continue
-                if comp.kind == "SWITCH":
-                    comp.value ^= 1
-                    return f"Switch {comp.label} = {comp.value}"
-                if comp.kind == "DFF" and self.allow_preset:
-                    if self.circuit.ticks > 0:
-                        return "Seed is locked while running. Press RESET."
-                    comp.init ^= 1
-                    self.circuit.reset()
-                    return f"Seed bit {comp.label} = {comp.init}"
+                if self.rect_of(comp).collidepoint(pos):
+                    msg = self._click_comp(comp)
+                    if msg:
+                        return msg
             return ""
 
         if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            # Released a body press: either a click or the end of a drag.
+            if self.press is not None:
+                pid = self.press[0]
+                was_dragging = self.moving is not None
+                self.press = None
+                self.moving = None
+                if not was_dragging and pid in self.circuit.comps:
+                    return self._click_comp(self.circuit.comps[pid])
+                return ""
+
             if self.moving is not None:
                 self.moving = None
                 return ""
@@ -621,14 +746,187 @@ class Workbench:
 
         screen.set_clip(old_clip)
 
+    def _channel_y(self, spec, y0, y1):
+        if spec is None:
+            return y0                      # run along the source's height
+        if spec == "DST":
+            return y1                      # run along the target's height
+        return int(self.area.y + spec * self.area.h)
+
+    # ---- automatic wire routing ----
+    #
+    # Every wire is a polyline of horizontal/vertical pieces. The router
+    # keeps lists of the pieces already placed this frame and refuses to
+    # reuse a lane where a wire from a DIFFERENT output would lie on top
+    # of them. It also refuses lanes that cut through a part or the
+    # caption under it. Wires from the same output may share a stub.
+
+    def _obstacle(self, comp):
+        """A part's rectangle, padded, with extra room below for its
+        caption (so channels never run through the text)."""
+        r = self.rect_of(comp)
+        return pygame.Rect(r.x - 6, r.y - 6, r.w + 12, r.h + 12 + 20)
+
+    def _h_free(self, y, xa, xb, skip=()):
+        lo, hi = (xa, xb) if xa <= xb else (xb, xa)
+        for comp in self.circuit.comps.values():
+            if comp.id in skip:
+                continue
+            r = self._obstacle(comp)
+            if r.top <= y <= r.bottom and r.right >= lo and r.left <= hi:
+                return False
+        return True
+
+    def _v_free(self, x, ya, yb, skip=()):
+        lo, hi = (ya, yb) if ya <= yb else (yb, ya)
+        for comp in self.circuit.comps.values():
+            if comp.id in skip:
+                continue
+            r = self._obstacle(comp)
+            if r.left <= x <= r.right and r.bottom >= lo and r.top <= hi:
+                return False
+        return True
+
+    @staticmethod
+    def _h_clash(used, y, xa, xb, src):
+        lo, hi = (xa, xb) if xa <= xb else (xb, xa)
+        for uy, ulo, uhi, usrc in used:
+            if usrc != src and abs(uy - y) < 7 and uhi >= lo and ulo <= hi:
+                return True
+        return False
+
+    @staticmethod
+    def _v_clash(used, x, ya, yb, src):
+        lo, hi = (ya, yb) if ya <= yb else (yb, ya)
+        for ux, ulo, uhi, usrc in used:
+            if usrc != src and abs(ux - x) < 7 and uhi >= lo and ulo <= hi:
+                return True
+        return False
+
+    @staticmethod
+    def _clean(pts):
+        out = [pts[0]]
+        for p in pts[1:]:
+            if p != out[-1]:
+                out.append(p)
+        return out
+
+    def _record(self, pts, src, used_h, used_v):
+        for a, b in zip(pts, pts[1:]):
+            if a[1] == b[1]:
+                used_h.append((a[1], min(a[0], b[0]), max(a[0], b[0]), src))
+            elif a[0] == b[0]:
+                used_v.append((a[0], min(a[1], b[1]), max(a[1], b[1]), src))
+
+    def _auto_route(self, src_id, dst_id, p0, p1, used_h, used_v):
+        x0, y0 = p0
+        x1, y1 = p1
+        skip = (src_id, dst_id)
+
+        # 1) dead straight if nothing is in the way
+        if (abs(y0 - y1) < 2 and x1 > x0 + 4
+                and self._h_free(y0, x0 + 4, x1 - 4, skip)
+                and not self._h_clash(used_h, y0, x0, x1, src_id)):
+            return [p0, p1]
+
+        # 2) forward wire: one vertical jog in a free column
+        if x1 >= x0 + 30:
+            mid = (x0 + x1) // 2
+            for step in range(0, 200, 8):
+                for xm in ((mid,) if step == 0 else (mid + step, mid - step)):
+                    if not (x0 + 10 <= xm <= x1 - 10):
+                        continue
+                    if not self._v_free(xm, y0, y1, skip):
+                        continue
+                    if self._v_clash(used_v, xm, y0, y1, src_id):
+                        continue
+                    if self._h_clash(used_h, y0, x0, xm, src_id):
+                        continue
+                    if self._h_clash(used_h, y1, xm, x1, src_id):
+                        continue
+                    if not self._h_free(y0, x0 + 4, xm, skip):
+                        continue
+                    if not self._h_free(y1, xm, x1 - 4, skip):
+                        continue
+                    return self._clean([p0, (xm, y0), (xm, y1), p1])
+
+        # 3) backward / blocked wire: out of the pin, along a free
+        #    channel, in from the left
+        lane_out = x0 + 14
+        for _ in range(12):
+            if not self._v_clash(used_v, lane_out, y0, y0 + 1, src_id):
+                break
+            lane_out += 8
+        lane_in = x1 - 14
+        for _ in range(12):
+            if not self._v_clash(used_v, lane_in, y1, y1 + 1, dst_id):
+                break
+            lane_in -= 8
+
+        pref = (y0 + y1) // 2
+        ys = sorted(
+            range(self.area.y + 10, self.area.bottom - 8, 6),
+            key=lambda yy: abs(yy - pref),
+        )
+        best = None
+        for ych in ys:
+            xa, xb = lane_out, lane_in
+            if not self._h_free(ych, xa, xb):
+                continue
+            if self._h_clash(used_h, ych, xa, xb, src_id):
+                continue
+            if not self._v_free(lane_out, y0, ych, skip):
+                continue
+            if not self._v_free(lane_in, ych, y1, skip):
+                continue
+            if self._v_clash(used_v, lane_out, y0, ych, src_id):
+                continue
+            if self._v_clash(used_v, lane_in, ych, y1, dst_id):
+                continue
+            best = ych
+            break
+        if best is None:
+            best = pref
+        return self._clean([
+            p0, (lane_out, y0), (lane_out, best),
+            (lane_in, best), (lane_in, y1), p1,
+        ])
+
     def _draw_wires(self, screen):
+        channels = getattr(self.circuit, "channels", {})
+        fixed = getattr(self.circuit, "wire_colour", None)
+        auto = getattr(self.circuit, "auto_route", False)
+        used_h, used_v = [], []
+
         for src_id, dst_id, pin in self.circuit.wires:
             src = self.circuit.comps[src_id]
             dst = self.circuit.comps[dst_id]
             x0, y0 = self.out_pin(src)
             x1, y1 = self.in_pin(dst, pin)
-            v = self.circuit.value(src_id)
-            colour = GREY if v is None else (GREEN if v else (60, 130, 160))
+
+            if fixed is not None:
+                colour = fixed
+            else:
+                v = self.circuit.value(src_id)
+                colour = GREY if v is None else (
+                    GREEN if v else (60, 130, 160))
+
+            key = (src_id, dst_id, pin)
+            if key in channels:
+                # Hand-routed wire: private channel + private lanes so no
+                # two wires ever run on top of each other.
+                ch = self._channel_y(channels[key], y0, y1)
+                pts = route_wire((x0, y0), (x1, y1), ch, pin)
+                draw_wire(screen, pts, colour, 3)
+                continue
+
+            if auto:
+                pts = self._auto_route(
+                    src_id, dst_id, (x0, y0), (x1, y1), used_h, used_v
+                )
+                self._record(pts, src_id, used_h, used_v)
+                draw_wire(screen, pts, colour, 3)
+                continue
 
             if x1 >= x0 + 24:
                 xm = (x0 + x1) // 2
@@ -648,18 +946,27 @@ class Workbench:
 
     def _draw_pin(self, screen, pos, wired, hover):
         colour = YELLOW if hover else (CYAN if wired else GREY)
-        pygame.draw.rect(screen, colour, (pos[0] - 5, pos[1] - 5, 10, 10))
+        p = max(5, int(10 * self._s()))
+        pygame.draw.rect(
+            screen, colour, (pos[0] - p // 2, pos[1] - p // 2, p, p)
+        )
 
     def _draw_component(self, screen, comp):
         r = self.rect_of(comp)
         value = self.circuit.value(comp.id)
         hover = self.find_pin(self.mouse)
+        s = self._s()
+        fs = self._fs()
+        dragging = self.moving == comp.id
 
         if comp.kind == "SWITCH":
             on = comp.value == 1
             pygame.draw.rect(screen, GREEN if on else BOX_FILL, r)
-            pygame.draw.rect(screen, WHITE if on else CYAN_DIM, r, 3)
-            text = _font(18).render(
+            pygame.draw.rect(
+                screen, YELLOW if dragging else (WHITE if on else CYAN_DIM),
+                r, 3,
+            )
+            text = _font(18 * fs).render(
                 f"{comp.label} = {comp.value}", False,
                 (4, 20, 30) if on else WHITE,
             )
@@ -668,9 +975,9 @@ class Workbench:
         elif comp.kind == "SOURCE":
             on = comp.value == 1
             pygame.draw.rect(screen, (60, 45, 15) if on else BOX_FILL, r)
-            pygame.draw.rect(screen, ORANGE, r, 3)
-            text = _font(15).render(
-                f"{comp.label} {comp.value}", False,
+            pygame.draw.rect(screen, YELLOW if dragging else ORANGE, r, 3)
+            text = _font(15 * fs).render(
+                f"{comp.label} = {comp.value}", False,
                 YELLOW if on else WHITE,
             )
             screen.blit(text, text.get_rect(center=r.center))
@@ -680,47 +987,60 @@ class Workbench:
             pygame.draw.rect(
                 screen, (12, 62, 46) if on else BOX_FILL, r
             )
-            pygame.draw.rect(screen, GREEN if on else CYAN, r, 3)
-            title = _font(14).render(comp.label or "D-FF", False, ORANGE)
-            screen.blit(title, title.get_rect(center=(r.centerx, r.top + 13)))
-            q = _font(26).render(
+            pygame.draw.rect(
+                screen, YELLOW if dragging else (GREEN if on else CYAN),
+                r, 3,
+            )
+            title = _font(14 * fs).render(comp.label or "D-FF", False, ORANGE)
+            screen.blit(
+                title, title.get_rect(center=(r.centerx, r.top + int(13 * s)))
+            )
+            q = _font(26 * fs).render(
                 str(comp.state), False, GREEN if on else WHITE
             )
-            screen.blit(q, q.get_rect(center=(r.centerx, r.centery + 6)))
-            d_lbl = _font(12).render("D", False, GREY)
-            q_lbl = _font(12).render("Q", False, GREY)
-            screen.blit(d_lbl, d_lbl.get_rect(center=(r.left + 11, r.centery)))
-            screen.blit(q_lbl, q_lbl.get_rect(center=(r.right - 11, r.centery)))
+            screen.blit(
+                q, q.get_rect(center=(r.centerx, r.centery + int(6 * s)))
+            )
+            d_lbl = _font(12 * fs).render("D", False, GREY)
+            q_lbl = _font(12 * fs).render("Q", False, GREY)
+            off = int(11 * s)
+            screen.blit(d_lbl, d_lbl.get_rect(center=(r.left + off, r.centery)))
+            screen.blit(q_lbl, q_lbl.get_rect(center=(r.right - off, r.centery)))
             # clock-edge triangle (all flip-flops share one clock)
+            t = max(4, int(7 * s))
             pygame.draw.polygon(
                 screen, CYAN,
-                [(r.centerx - 7, r.bottom - 2), (r.centerx + 7, r.bottom - 2),
-                 (r.centerx, r.bottom - 12)], 2,
+                [(r.centerx - t, r.bottom - 2), (r.centerx + t, r.bottom - 2),
+                 (r.centerx, r.bottom - 2 - int(10 * s))], 2,
             )
 
         elif comp.kind == "LED":
             lit = value == 1
             centre = r.center
             if lit:
-                pygame.draw.circle(screen, (110, 60, 20), centre, 33)
+                pygame.draw.circle(screen, (110, 60, 20), centre,
+                                   int(33 * s))
             pygame.draw.circle(
-                screen, YELLOW if lit else (45, 38, 40), centre, 26
+                screen, YELLOW if lit else (45, 38, 40), centre, int(26 * s)
             )
-            pygame.draw.circle(screen, WHITE, centre, 26, 3)
+            pygame.draw.circle(
+                screen, YELLOW if dragging else WHITE, centre,
+                int(26 * s), 3,
+            )
             if value is None:
-                text = _font(14).render("?", False, GREY)
+                text = _font(14 * fs).render("?", False, GREY)
                 screen.blit(text, text.get_rect(center=centre))
 
         else:  # gate
-            colour = YELLOW if self.moving == comp.id else CYAN
+            colour = YELLOW if dragging else CYAN
             draw_pixel_gate_symbol(screen, comp.kind, r, colour)
 
         if comp.sub:
-            sub = _font(12).render(comp.sub, False, GREY)
-            screen.blit(sub, sub.get_rect(midtop=(r.centerx, r.bottom + 6)))
+            sub = _font(12 * fs).render(comp.sub, False, GREY)
+            screen.blit(sub, sub.get_rect(midtop=(r.centerx, r.bottom + 5)))
         elif comp.kind == "LED" and comp.label:
-            sub = _font(12).render(comp.label, False, GREY)
-            screen.blit(sub, sub.get_rect(midtop=(r.centerx, r.bottom + 6)))
+            sub = _font(12 * fs).render(comp.label, False, GREY)
+            screen.blit(sub, sub.get_rect(midtop=(r.centerx, r.bottom + 5)))
 
         # pins
         if comp.has_output:

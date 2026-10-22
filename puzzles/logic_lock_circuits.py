@@ -154,8 +154,7 @@ class LogicLockCircuitMixin:
         self.phase = "BUILD"
         self.lab_open = False
         self.build_message = (
-            "AND IS CORRECT! NOW BUILD IT: wire A and B into the gate, "
-            "and the gate into the ALARM."
+            "AND IS CORRECT! NOW BUILD IT."
         )
 
     # ---------------------------------------------------------
@@ -192,11 +191,11 @@ class LogicLockCircuitMixin:
 
         if None in outputs:
             self.build_message = (
-                "CIRCUIT INCOMPLETE: every input pin needs a wire."
+                "CIRCUIT INCOMPLETE: Every input pin needs a wire."
             )
         elif outputs != CORRECT_OUTPUTS:
             self.build_message = (
-                "WRONG LOGIC: the alarm must ring ONLY when A and B "
+                "WRONG LOGIC: The alarm will ring ONLY when A and B "
                 "are both 1. Check your wiring."
             )
         else:
@@ -246,7 +245,7 @@ class LogicLockCircuitMixin:
         col_w = max(1, w // 3)
         header_h, row_h = 23, 25
 
-        for col, label in enumerate(["A", "B", "Y"]):
+        for col, label in enumerate(["A", "B", "OUTPUT"]):
             cell = pygame.Rect(x + col * col_w, y, col_w, header_h)
             pygame.draw.rect(screen, (13, 29, 44), cell)
             pygame.draw.rect(screen, CYAN_DIM, cell, 2)
@@ -285,7 +284,7 @@ class LogicLockCircuitMixin:
 
     def _draw_build(self, screen):
         panel, left, right, y = self._frame(
-            screen, "SECURITY BREACH // LEVEL ONE // STAGE 4: BUILD", RED
+            screen, "SECURITY BREACH // LEVEL ONE", RED
         )
         width = right - left
 
@@ -296,8 +295,8 @@ class LogicLockCircuitMixin:
         y += 38
 
         for text in (
-            "Mission: ring the alarm only when smoke is detected AND "
-            "the system is armed.",
+            "Nice work, Detective. Now prove it: The alarm rings only "
+            "when smoke is detected AND the system is armed.",
             "Drag from an OUTPUT pin to an INPUT pin. Right-click an "
             "input pin to remove a wire.",
         ):
@@ -336,6 +335,6 @@ class LogicLockCircuitMixin:
             msg = self._fit_text(self.build_message, width, 14, colour)
             screen.blit(msg, (left, y))
             hint = self._fit_text(
-                "ENTER: Verify the circuit", width, 13, GREY
+                "Click a switch to flip it! | ENTER: Verify your circuit", width, 13, GREY
             )
             screen.blit(hint, (left, y + 24))

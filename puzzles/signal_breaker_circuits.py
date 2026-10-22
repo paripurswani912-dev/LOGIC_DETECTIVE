@@ -42,22 +42,34 @@ class SignalBreakerCircuitMixin:
 
     def _make_lfsr_circuit(self):
         c = Circuit()
-        c.add(Component("X", "XOR", 0.10, 0.76, "", "FEEDBACK"))
 
-        for i, x in enumerate([0.27, 0.39, 0.51, 0.63, 0.75]):
+        # Smaller parts and labels, and wires that route themselves
+        # around parts, captions and each other.
+        c.size_scale = 0.8
+        c.font_scale = 0.85
+        c.auto_route = True
+
+        # Start layout: flip-flops across the top, the two XOR stages
+        # and the cipher along the bottom. Every part can be dragged
+        # to rearrange it.
+        top_y, bot_y = 0.22, 0.68
+
+        c.add(Component("X", "XOR", 0.16, bot_y, "", "FEEDBACK"))
+
+        for i, x in enumerate([0.22, 0.34, 0.46, 0.58, 0.70]):
             c.add(Component(
-                FF_IDS[i], "DFF", x, 0.27, f"FF{i + 1}", f"CELL {i + 1}"
+                FF_IDS[i], "DFF", x, top_y, f"FF{i + 1}", f"CELL {i + 1}"
             ))
 
-        c.add(Component("KEY", "LED", 0.92, 0.27, "KEY BIT"))
-        c.add(Component("C", "SOURCE", 0.40, 0.76, "CIPHER", "CIPHERTEXT"))
-        c.add(Component("X2", "XOR", 0.65, 0.76, "", "DECRYPT"))
-        c.add(Component("P", "LED", 0.90, 0.76, "PLAINTEXT"))
+        c.add(Component("KEY", "LED", 0.90, top_y, "KEY BIT"))
+        c.add(Component("C", "SOURCE", 0.44, bot_y, "CIPHER", "CIPHERTEXT"))
+        c.add(Component("X2", "XOR", 0.66, bot_y, "", "DECRYPT"))
+        c.add(Component("P", "LED", 0.90, bot_y, "PLAINTEXT"))
 
         c.connect("F5", "KEY", 0)  # pre-wired: shows the output bit
         c.reset()
         return c
-
+    
     def _init_circuits(self):
         self.phase = "ANALYZE"  # ANALYZE -> BUILD
         self.build_verified = False
@@ -69,6 +81,7 @@ class SignalBreakerCircuitMixin:
         self.build = Workbench(
             self._make_lfsr_circuit(),
             allow_wiring=True, allow_placing=False, allow_preset=True,
+            allow_moving=True,
         )
 
     def start_build_phase(self):
@@ -301,28 +314,30 @@ class SignalBreakerCircuitMixin:
     def _draw_build(self, screen):
         screen.fill(BG)
         panel = draw_pixel_monitor(screen)
+
+        # Inner area, kept well inside the purple monitor border.
         inner = pygame.Rect(
-            panel.x + 16, panel.y + 24, panel.width - 32, panel.height - 48
+            panel.x + 24, panel.y + 20, panel.width - 48, panel.height - 52
         )
-        x, w, gap = inner.x, inner.width, 8
-        y = inner.y + 4
+        x, w, gap = inner.x, inner.width, 6
+        y = inner.y
 
         # header lines
         blink_on = (pygame.time.get_ticks() // 450) % 2 == 0
-        alert = "■ SECURITY BREACH // LEVEL SIX // BUILD"
-        alert_font = self._fit_font(alert, w - 20, 18)
+        alert = "■ SECURITY BREACH // LEVEL SIX"
+        alert_font = self._fit_font(alert, w - 20, 16)
         self._text(
             screen, alert, alert_font,
             RED if blink_on else (135, 35, 48), x + 6, y,
         )
-        y += alert_font.get_linesize() + 4
+        y += alert_font.get_linesize() + 2
 
         title = "BUILD THE SIGNAL MACHINE"
-        title_font = self._fit_font(title, w - 20, 26)
+        title_font = self._fit_font(title, w - 20, 24)
         self._text(screen, title, title_font, CYAN, x + 4, y)
         y += title_font.get_linesize() + 2
 
-        body_font = pygame.font.SysFont("monospace", 13, bold=True)
+        body_font = pygame.font.SysFont("monospace", 12, bold=True)
         instructions = (
             "Drag from an OUTPUT pin (right) to an INPUT pin (left). Chain the "
             "5 flip-flops, XOR cells 3 and 5 back into D1, and click a flip-flop "
@@ -332,17 +347,23 @@ class SignalBreakerCircuitMixin:
         lines = self._wrapped_lines(instructions, body_font, w - 12)[:3]
         for line in lines:
             self._text(screen, line, body_font, WHITE, x + 6, y)
-            y += body_font.get_linesize() + 1
-        y += 6
+            y += body_font.get_linesize()
+        y += 4
 
-        # layout budget
+        # ---- layout budget ----
+        # Fixed parts shrink first on short windows so the workbench
+        # always keeps enough height for the captions under its rows.
         rows = 7
-        row_h = 18 if inner.height >= 700 else 14
+        row_h, btn_h, msg_h = 14, 36, 44
+
+        def bench_space():
+            timing = 26 + rows * row_h + 6
+            return inner.bottom - y - (timing + btn_h + msg_h + 3 * gap)
+
+        if bench_space() < 240:
+            row_h, btn_h, msg_h = 12, 32, 38
+        bench_h = max(150, bench_space())
         timing_h = 26 + rows * row_h + 6
-        btn_h, msg_h = 40, 46
-        bench_h = max(
-            190, inner.bottom - y - (timing_h + btn_h + msg_h + 3 * gap)
-        )
 
         # workbench
         self.build.area = pygame.Rect(x, y, w, bench_h)
@@ -379,20 +400,21 @@ class SignalBreakerCircuitMixin:
             )
         y += btn_h + gap
 
-        # message
-        msg_rect = pygame.Rect(x, y, w, max(msg_h, inner.bottom - y))
+        # message box: ends exactly at the bottom of the inner area,
+        # so it can never spill over the monitor border.
+        msg_rect = pygame.Rect(x, y, w, max(30, inner.bottom - y))
         self._draw_panel(screen, msg_rect)
         colour = {"error": RED, "ok": GREEN}.get(self.build_status, YELLOW)
-        msg_font = pygame.font.SysFont("monospace", 13, bold=True)
+        msg_font = pygame.font.SysFont("monospace", 12, bold=True)
         msg_lines = self._wrapped_lines(
             self.build_message, msg_font, msg_rect.width - 20
         )
         if self.build_verified:
             msg_lines = msg_lines[:1]
-        line_y = msg_rect.y + 7
+        line_y = msg_rect.y + 6
         for line in msg_lines[:2]:
             self._text(screen, line, msg_font, colour, msg_rect.x + 10, line_y)
-            line_y += msg_font.get_linesize() + 1
+            line_y += msg_font.get_linesize()
         if self.build_verified and blink_on:
             self._text(
                 screen, "PRESS ENTER TO RETURN TO THE LAB", msg_font, YELLOW,

@@ -99,31 +99,38 @@ def _bezier(p0, p1, p2, steps=24):
 def _make_lock_circuit():
     c = Circuit()
 
-    # Constant "idle" state: always 1.
-    s0 = c.add(Component("S0", "SOURCE", 0.07, 0.10, "S0", "RED"))
+    # Look: smaller parts, smaller labels, one wire colour.
+    c.size_scale = 0.75
+    c.font_scale = 0.72
+    c.wire_colour = (70, 150, 175)
+
+    # Every wire finds its own free lane. It avoids parts, the captions
+    # under them (AMBER, BLUE*, ...) and wires from other buttons.
+    c.auto_route = True
+
+    s0 = c.add(Component("S0", "SOURCE", 0.065, 0.06, "S0", "RED"))
     s0.value = 1
 
-    # The four keypad buttons.
-    for letter, ry in zip("ABCD", (0.32, 0.50, 0.68, 0.86)):
-        c.add(Component(letter, "SWITCH", 0.07, ry, letter, "BUTTON"))
+    # S0 and the four buttons, evenly spaced.
+    for letter, ry in zip("ABCD", (0.24, 0.42, 0.60, 0.78)):
+        c.add(Component(letter, "SWITCH", 0.065, ry, letter, "BUTTON"))
 
-    # (flip-flop id, lamp colour, x of AND gate, y)
+    # (flip-flop id, lamp, gate x, row y, flip-flop x)
     stages = [
-        ("S1", "AMBER", 0.22, 0.27),
-        ("S2", "AMBER*", 0.46, 0.27),
-        ("S3", "BLUE", 0.70, 0.27),
-        ("S4", "BLUE*", 0.22, 0.73),
-        ("S5", "VIOLET", 0.46, 0.73),
-        ("OPEN", "GREEN", 0.70, 0.73),
+        ("S1",   "AMBER",  0.20, 0.22, 0.33),
+        ("S2",   "AMBER*", 0.46, 0.22, 0.59),
+        ("S3",   "BLUE",   0.72, 0.22, 0.85),
+        ("S4",   "BLUE*",  0.20, 0.70, 0.33),
+        ("S5",   "VIOLET", 0.46, 0.70, 0.59),
+        ("OPEN", "GREEN",  0.72, 0.70, 0.85),
     ]
-    for i, (name, lamp, rx, ry) in enumerate(stages, start=1):
+    for i, (name, lamp, gx, ry, fx) in enumerate(stages, start=1):
         gate = f"g{i}"
-        c.add(Component(gate, "AND", rx, ry))
-        c.add(Component(name, "DFF", rx + 0.12, ry, name, lamp))
-        # Pre-wired: AND output -> flip-flop D input.
-        c.wires.append((gate, name, 0))
+        c.add(Component(gate, "AND", gx, ry))
+        c.add(Component(name, "DFF", fx, ry, name, lamp))
+        c.wires.append((gate, name, 0))      # straight: AND -> D
 
-    c.add(Component("LED", "LED", 0.93, 0.73, "OPEN"))
+    c.add(Component("LED", "LED", 0.965, 0.70, "OPEN"))
     c.wires.append(("OPEN", "LED", 0))
     return c
 
@@ -156,7 +163,11 @@ class MemoryProtocolCircuitMixin:
         self._node_pos = {}
         self._node_r = 30
 
-        self.bench = Workbench(_make_lock_circuit(), allow_wiring=True)
+        self.bench = Workbench(
+            _make_lock_circuit(),
+            allow_wiring=True,
+            allow_moving=True,
+        )
         self.button_rects = {}
         self.build_message = ""
         self.build_color = YELLOW
@@ -505,7 +516,7 @@ class MemoryProtocolCircuitMixin:
 
     def _draw_diagram(self, screen):
         lay = self._frame(
-            screen, "■ SECURITY NETWORK // LEVEL THREE // STEP 2 OF 3"
+            screen, "■ SECURITY NETWORK // LEVEL THREE"
         )
         X, Y, W, H, sc = lay.X, lay.Y, lay.W, lay.H, lay.scale
         drawing = self.diagram_stage == "DRAW"
@@ -517,12 +528,14 @@ class MemoryProtocolCircuitMixin:
         msg_font = self._font(max(13, int(16 * sc)), True)
 
         intro = (
-            "Draw your notebook as a state diagram. Click a state, click "
-            "the state it leads to, then press the button letter."
+            "Turn your notes into a map. Click the state an arrow starts "
+            "from, click the state it leads to, then press the button "
+            "that caused it."
             if drawing else
-            "Your diagram is complete. Now find the SHORTEST button "
-            "sequence from RED to GREEN."
+            "Map complete! Follow the arrows from RED to GREEN and type "
+            "the shortest button sequence that gets there."
         )
+
         self._wrapped_text(
             screen, intro, intro_font, CYAN,
             X(35), Y(67), W(1325), H(33), H(75),
@@ -649,7 +662,7 @@ class MemoryProtocolCircuitMixin:
 
     def _draw_build(self, screen):
         lay = self._frame(
-            screen, "■ SECURITY NETWORK // LEVEL THREE // STEP 3 OF 3"
+            screen, "■ SECURITY NETWORK // LEVEL THREE"
         )
         X, Y, W, H, sc = lay.X, lay.Y, lay.W, lay.H, lay.scale
 
@@ -657,18 +670,22 @@ class MemoryProtocolCircuitMixin:
         button_font = self._font(max(14, int(17 * sc)), True)
         info_font = self._font(max(14, int(16 * sc)), True)
         msg_font = self._font(max(13, int(16 * sc)), True)
-        small_font = self._font(max(11, int(13 * sc)), True)
+        small_font = self._font(max(10, int(12 * sc)), True)
         done_font = self._font(max(20, int(27 * sc)), True)
 
+        # Intro text: two lines of 30 design-px each, so it ends by ~Y(125)
+        # and never touches the workbench below.
         self._wrapped_text(
             screen,
-            "Now BUILD the machine. Each AND gate moves the token to the "
-            "next state when the right button is pressed.",
-            intro_font, CYAN, X(35), Y(67), W(1325), H(33), H(75),
+            "Build the lock. A signal starts at S0 and moves one state "
+            "per tick, but only if its button is pressed. Wire each AND "
+            "gate to its state and button.",
+            intro_font, CYAN, X(35), Y(60), W(1325), H(30), H(70),
         )
 
-        # Workbench
-        self.bench.area = pygame.Rect(X(35), Y(150), W(1330), H(450))
+        # Workbench: Y(140) .. Y(660). Starts below the intro text and ends
+        # clearly above the CLOCK / RESET / TEST row at Y(685).
+        self.bench.area = pygame.Rect(X(15), Y(140), W(1370), H(520))
         self.bench.draw(screen)
 
         circuit = self.bench.circuit
@@ -680,7 +697,7 @@ class MemoryProtocolCircuitMixin:
         self.button_rects = {}
         mouse = pygame.mouse.get_pos()
         for i, (name, key) in enumerate(labels):
-            rect = pygame.Rect(X(35) + i * (bw + gap), Y(625), bw, bh)
+            rect = pygame.Rect(X(35) + i * (bw + gap), Y(685), bw, bh)
             self.button_rects[name] = rect
             hover = rect.collidepoint(mouse)
             pygame.draw.rect(screen, PANEL_BLUE, rect)
@@ -691,15 +708,15 @@ class MemoryProtocolCircuitMixin:
         info_x = X(35) + 3 * (bw + gap) + W(15)
         self._text(
             screen, f"CLOCK TICKS: {circuit.ticks}",
-            info_font, WHITE, info_x, Y(630),
+            info_font, WHITE, info_x, Y(690),
         )
         self._text(
             screen, f"ACTIVE: {', '.join(active) if active else 'NONE'}",
-            info_font, YELLOW, info_x, Y(630) + H(26),
+            info_font, YELLOW, info_x, Y(690) + H(26),
         )
 
         # Status / completion
-        status_x, status_y = X(35), Y(700)
+        status_x, status_y = X(35), Y(755)
         if self.awaiting_exit_confirmation:
             self._text(
                 screen, "CIRCUIT VERIFIED!", done_font, GREEN,
@@ -716,12 +733,12 @@ class MemoryProtocolCircuitMixin:
         else:
             self._wrapped_text(
                 screen, self.build_message, msg_font, self.build_color,
-                status_x, status_y, W(1330), H(23), H(80),
+                status_x, status_y, W(1330), H(23), H(70),
             )
             self._wrapped_text(
                 screen,
-                "A-D: press that button (one clock tick)   Click a switch "
-                "to flip it   Drag from a pin to a pin to wire   "
+                "A-D: Press that button (one clock tick) | Click a switch "
+                "to flip it | Drag from a pin to a pin to wire | "
                 "Right-click an input pin to remove a wire",
-                small_font, GREY, status_x, Y(800), W(1330), H(18), H(45),
+                small_font, GREY, status_x, Y(840), W(1330), H(18), H(30),
             )

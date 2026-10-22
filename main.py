@@ -713,7 +713,7 @@ def draw_laboratory_screen(
     interaction_manager.draw_prompt(screen, nearby)
 
     # Compact HUD panel.
-    hud = pygame.Rect(14, 12, 350, 64)
+    hud = pygame.Rect(14, 12, 390, 64)
 
     pygame.draw.rect(
         screen,
@@ -750,6 +750,26 @@ def draw_laboratory_screen(
     screen.blit(
         progress_surface,
         (24, 20),
+    )
+
+    # Fixed grey hint beside the count; always shown, whatever the message.
+    hint_font = pygame.font.SysFont(
+        "consolas", 11, bold=True
+    )
+
+    hint_surface = hint_font.render(
+        "| Press N for your notes.",
+        False,
+        (130, 136, 145),
+    )
+
+    screen.blit(
+        hint_surface,
+        (
+            24 + progress_surface.get_width() + 10,
+            20 + progress_surface.get_height()
+            - hint_surface.get_height() - 1,
+        ),
     )
 
     # Second line: instruction.

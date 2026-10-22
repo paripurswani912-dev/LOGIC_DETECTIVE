@@ -132,8 +132,8 @@ class FinalOverrideCircuitMixin:
             self.start_build_phase()
         else:
             self.pick_message = (
-                "NOT EQUIVALENT. Test it: does it match the original "
-                "for every A, B, C, D?"
+                "NOT EQUIVALENT. Test the logic: does this expression produce the same output "
+                "as the original Boolean expression for every combination of A, B, C, D?"
             )
             self.pick_color = settings.RED
             self.pick_index = None
@@ -242,7 +242,7 @@ class FinalOverrideCircuitMixin:
 
     def _draw_identify(self, screen):
         panel, left, right, width = self._frame(
-            screen, "SECURITY NETWORK // LEVEL FOUR // STEP 2 OF 3"
+            screen, "SECURITY NETWORK // LEVEL FOUR"
         )
         cx = panel.centerx
         ph = panel.height
@@ -258,7 +258,7 @@ class FinalOverrideCircuitMixin:
             cx, panel.y + int(ph * 0.21), width,
         )
         self._centered(
-            screen, "Which expression is equivalent to it?",
+            screen, "Which expression is equivalent to the original one?",
             max(20, int(panel.width * 0.019)), settings.YELLOW,
             cx, panel.y + int(ph * 0.275), width,
         )
@@ -309,7 +309,7 @@ class FinalOverrideCircuitMixin:
 
     def _draw_build(self, screen):
         panel, left, right, width = self._frame(
-            screen, "SECURITY NETWORK // LEVEL FOUR // STEP 3 OF 3"
+            screen, "SECURITY NETWORK // LEVEL FOUR"
         )
         cx = panel.centerx
         ph = panel.height

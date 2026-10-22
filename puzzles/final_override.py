@@ -267,7 +267,7 @@ class FinalOverridePuzzle(FinalOverrideCircuitMixin, BasePuzzle):
         alert_visible = (pygame.time.get_ticks() // 500) % 2 == 0
 
         if alert_visible:
-            alert_text = "SECURITY NETWORK // LEVEL FOUR // STEP 1 OF 3"
+            alert_text = "SECURITY NETWORK // LEVEL FOUR"
             alert_font = self.fit_font(
                 alert_text,
                 max(18, int(panel.width * 0.018)),
