@@ -1,10 +1,8 @@
 
 # puzzles/logic_lock.py
-# Level 1: Logic Lock
+# Level 1: Logic Lock — Pixel-Art Computer Interface
 
 import pygame
-import settings
-
 from puzzles.base_puzzle import BasePuzzle
 
 
@@ -16,6 +14,7 @@ class LogicLockPuzzle(BasePuzzle):
         self.title = "LOGIC LOCK"
         self.selected_gate = None
         self.selected_row = 0
+        self.elapsed_time = 0.0
 
         self.truth_table = [
             {"a": 0, "b": 0, "answer": None},
@@ -24,269 +23,586 @@ class LogicLockPuzzle(BasePuzzle):
             {"a": 1, "b": 1, "answer": None},
         ]
 
-        self.message = (
-            "The alarm must activate only when BOTH inputs are ON."
+        self.submitted = False
+        self.alarm_activated = False
+        self.awaiting_exit_confirmation = False
+
+        self.message = ""
+        self.feedback_color = (255, 220, 65)
+
+        available_fonts = {
+            name.lower() for name in pygame.font.get_fonts()
+        }
+
+        pixel_fonts = [
+            "press start 2p",
+            "pixeloid sans",
+            "pixel operator",
+            "monospace",
+        ]
+
+        self.pixel_font_name = next(
+            (
+                name for name in pixel_fonts
+                if name.lower() in available_fonts
+            ),
+            "monospace",
         )
 
-        self.font = pygame.font.Font(None, 27)
-        self.small_font = pygame.font.Font(None, 22)
-        self.title_font = pygame.font.Font(None, 46)
+        self.font = self._make_font(17)
+        self.small_font = self._make_font(14)
+        self.title_font = self._make_font(25)
+
+    def _make_font(self, size):
+        return pygame.font.SysFont(
+            self.pixel_font_name, size, bold=True
+        )
+
+    # ---------------------------------------------------------
+    # PIXEL MONITOR FRAME
+    # ---------------------------------------------------------
+
+    def _draw_pixel_monitor(self, screen, rect):
+        x, y, w, h = rect
+
+        bezel = (28, 30, 52)
+        bezel_light = (48, 54, 91)
+        bezel_dark = (15, 17, 34)
+        screen_black = (4, 10, 22)
+        screen_edge = (39, 91, 113)
+
+        pygame.draw.rect(
+            screen, (2, 3, 10),
+            (x + 8, y + 8, w, h)
+        )
+
+        pygame.draw.rect(
+            screen, bezel,
+            (x + 8, y + 4, w - 16, h - 8)
+        )
+        pygame.draw.rect(
+            screen, bezel,
+            (x + 4, y + 10, w - 8, h - 20)
+        )
+
+        step = 8
+        corners = [
+            (x + 16, y),
+            (x + 8, y + 8),
+            (x, y + 16),
+            (x + w - 24, y),
+            (x + w - 16, y + 8),
+            (x + w - 8, y + 16),
+            (x + 16, y + h - 8),
+            (x + 8, y + h - 16),
+            (x, y + h - 24),
+            (x + w - 24, y + h - 8),
+            (x + w - 16, y + h - 16),
+            (x + w - 8, y + h - 24),
+        ]
+
+        for px, py in corners:
+            pygame.draw.rect(
+                screen, bezel_light,
+                (px, py, step, step)
+            )
+
+        pygame.draw.rect(
+            screen, bezel_dark,
+            (x + 18, y + 18, w - 36, h - 36)
+        )
+
+        panel = pygame.Rect(
+            x + 27, y + 27, w - 54, h - 54
+        )
+
+        pygame.draw.rect(screen, screen_black, panel)
+        pygame.draw.rect(screen, screen_edge, panel, 3)
+
+        for px in range(panel.x + 8, panel.right - 8, 14):
+            pygame.draw.rect(
+                screen, (40, 86, 109),
+                (px, panel.y + 5, 9, 3)
+            )
+
+        # Tiny monitor indicator lights.
+        pygame.draw.rect(
+            screen, (4, 5, 12),
+            (x + w - 54, y + h - 13, 9, 4)
+        )
+        pygame.draw.rect(
+            screen, (4, 5, 12),
+            (x + w - 38, y + h - 13, 9, 4)
+        )
+        pygame.draw.rect(
+            screen, (0, 218, 225),
+            (x + w - 38, y + h - 13, 5, 4)
+        )
+
+        return panel
+
+    # ---------------------------------------------------------
+    # TEXT HELPERS
+    # ---------------------------------------------------------
+
+    def _draw_text(
+        self, screen, text, x, y, color, font=None
+    ):
+        font = font or self.small_font
+        surface = font.render(text, False, color)
+        screen.blit(surface, (x, y))
+        return surface.get_rect(topleft=(x, y))
+
+    def _fit_text(
+        self, text, max_width, preferred_size, color
+    ):
+        size = preferred_size
+
+        while size >= 8:
+            font = self._make_font(size)
+            surface = font.render(text, False, color)
+
+            if surface.get_width() <= max_width:
+                return surface
+
+            size -= 1
+
+        return self._make_font(8).render(
+            text, False, color
+        )
+
+    # ---------------------------------------------------------
+    # KEYBOARD CONTROLS
+    # ---------------------------------------------------------
 
     def handle_event(self, event):
-        """Handle row selection, outputs, and gate selection."""
-
-        if event.type != pygame.KEYDOWN or self.solved:
+        if event.type != pygame.KEYDOWN:
             return
 
-        # Select a row using 1, 2, 3, or 4.
-        if event.key in (
-            pygame.K_1,
-            pygame.K_2,
-            pygame.K_3,
-            pygame.K_4
-        ):
-            self.selected_row = event.key - pygame.K_1
-            self.message = (
-                f"Row {self.selected_row + 1} selected. "
-                "LEFT = output 0; RIGHT = output 1."
-            )
+        if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
 
-        # Set the output without changing the selected row.
-        elif event.key == pygame.K_LEFT:
-            self.truth_table[self.selected_row]["answer"] = 0
-            self.message = (
-                f"Row {self.selected_row + 1}: output set to 0."
-            )
+            # After a successful activation, Enter a second time
+            # to let the main game exit the puzzle interface.
+            if self.awaiting_exit_confirmation:
+                self.solved = True
+                return
 
-        elif event.key == pygame.K_RIGHT:
-            self.truth_table[self.selected_row]["answer"] = 1
-            self.message = (
-                f"Row {self.selected_row + 1}: output set to 1."
-            )
+            if self.solved:
+                return
 
-        # Select the logic gate.
+            self.check_answer()
+            return
+
+        # Don't allow changing the circuit while the success
+        # message is waiting for the second Enter.
+        if self.solved or self.awaiting_exit_confirmation:
+            return
+
+        row_keys = {
+            pygame.K_1: 0,
+            pygame.K_2: 1,
+            pygame.K_3: 2,
+            pygame.K_4: 3,
+            pygame.K_KP1: 0,
+            pygame.K_KP2: 1,
+            pygame.K_KP3: 2,
+            pygame.K_KP4: 3,
+        }
+
+        if event.key in row_keys:
+            self.selected_row = row_keys[event.key]
+
+        elif event.key in (pygame.K_LEFT, pygame.K_0):
+            self.truth_table[
+                self.selected_row
+            ]["answer"] = 0
+
+        elif event.key in (pygame.K_RIGHT, pygame.K_1):
+            self.truth_table[
+                self.selected_row
+            ]["answer"] = 1
+
         elif event.key == pygame.K_a:
             self.selected_gate = "AND"
-            self.message = "AND gate selected."
 
         elif event.key == pygame.K_o:
             self.selected_gate = "OR"
-            self.message = "OR gate selected."
 
-        # Submit the answer.
-        elif event.key == pygame.K_RETURN:
-            self.check_answer()
+    # ---------------------------------------------------------
+    # CHECK THE CIRCUIT
+    # ---------------------------------------------------------
 
     def check_answer(self):
-        """Check the selected gate and all four outputs."""
-
-        if self.selected_gate is None:
-            self.message = "Choose AND (A) or OR (O) first."
-            return
-
-        if any(
-            row["answer"] is None
-            for row in self.truth_table
-        ):
-            self.message = "Complete all four output rows first."
-            return
+        self.submitted = True
+        self.alarm_activated = False
 
         correct_outputs = [0, 0, 0, 1]
-
         entered_outputs = [
-            row["answer"]
-            for row in self.truth_table
+            row["answer"] for row in self.truth_table
         ]
 
+        # Correct answer: keep the interface open.
+        # The second Enter will exit the puzzle.
         if (
             self.selected_gate == "AND"
             and entered_outputs == correct_outputs
         ):
-            self.solved = True
-            self.message = (
-                "ACCESS GRANTED! The AND gate is correct."
-            )
+            self.alarm_activated = True
+            self.awaiting_exit_confirmation = True
+            self.message = "ALARM HAS BEEN ACTIVATED!"
+            self.feedback_color = (255, 220, 65)
+            return
 
-        elif self.selected_gate == "OR":
-            self.message = (
-                "Incorrect gate. OR activates when either "
-                "input is ON."
-            )
+        # Incorrect answer: alarm stays deactivated.
+        self.message = "ALARM IS STILL IN DEACTIVATED MODE!"
+        self.feedback_color = (255, 220, 65)
 
-        else:
-            self.message = (
-                "Incorrect truth table. Check each row and retry."
-            )
+        # Reset failed attempts for another try.
+        for row in self.truth_table:
+            row["answer"] = None
+
+        self.selected_row = 0
+        self.selected_gate = None
 
     def update(self, dt):
-        """No continuous updates are needed for this puzzle."""
-        pass
+        self.elapsed_time += dt
+
+    # ---------------------------------------------------------
+    # DRAW INTERFACE
+    # ---------------------------------------------------------
 
     def draw(self, screen):
-        """Draw the complete Logic Lock puzzle screen."""
+        screen.fill((5, 7, 17))
 
-        screen.fill(settings.DARK_BLUE)
+        width, height = screen.get_size()
 
-        # Title
-        title = self.title_font.render(
-            self.title, True, settings.CYAN
+        monitor_rect = pygame.Rect(
+            18, 14, width - 36, height - 28
         )
-        screen.blit(title, (55, 30))
 
-        instructions = [
-            "SECURITY CIRCUIT TAMPERED",
-            "The alarm must activate ONLY when BOTH inputs are ON.",
-            "Select a row using keys 1-4.",
-            "Press LEFT for output 0; RIGHT for output 1.",
-            "Choose AND with A or OR with O, then press ENTER.",
+        panel = self._draw_pixel_monitor(
+            screen, monitor_rect
+        )
+
+        left = panel.left + 22
+        right = panel.right - 22
+        content_width = right - left
+
+        y = panel.top + 17
+
+        # 1. Blinking security alert.
+        if int(self.elapsed_time * 2.5) % 2 == 0:
+            pygame.draw.rect(
+                screen, (255, 55, 69),
+                (left, y + 4, 8, 8)
+            )
+
+            alert = self._fit_text(
+                "SECURITY BREACH // LEVEL ONE",
+                content_width - 20,
+                16,
+                (255, 65, 78),
+            )
+            screen.blit(alert, (left + 19, y))
+
+        y += 32
+
+        # 2. Main warning.
+        self._draw_text(
+            screen,
+            "INTRUSION DETECTED!",
+            left, y,
+            (0, 229, 239),
+            self.title_font,
+        )
+
+        y += 36
+
+        # 3. Single-line challenge.
+        # Keep instructions readable without pushing the truth table
+        # into the result-message area.
+        instruction_lines = [
+            "Input A: Smoke sensor detects smoke.",
+            "Input B: Security system is armed.",
+            "Alarm activates only when BOTH inputs are ON.",
         ]
 
-        y = 90
-
-        for line in instructions:
-            rendered = self.small_font.render(
-                line, True, settings.WHITE
+        instruction_font = self._make_font(17)
+        for line in instruction_lines:
+            surface = instruction_font.render(
+                line, False, (222, 232, 244)
             )
-            screen.blit(rendered, (55, y))
-            y += 29
+            screen.blit(surface, (left, y))
+            y += 23
 
-        # Truth table headings
-        headers = [
-            ("ROW", 100),
-            ("A", 220),
-            ("B", 310),
-            ("OUTPUT", 415),
+        y += 4
+
+        pygame.draw.line(
+            screen, (48, 75, 105),
+            (left, y), (right, y), 2
+        )
+        y += 10
+
+        # 4. Controls.
+        self._draw_text(
+            screen, "CONTROLS",
+            left, y,
+            (255, 184, 72), self.font
+        )
+        y += 24
+
+        controls = [
+            "KEYS 1-4: Select row number",
+            "LEFT ARROW KEY / RIGHT ARROW KEY: Set output to '0' OR '1'",
+            "A: AND Gate | O: OR Gate",
+            "ENTER: Verify the circuit",
         ]
 
-        for label, x in headers:
-            rendered = self.font.render(
-                label, True, settings.YELLOW
+        for line in controls:
+            surface = self._fit_text(
+                line, content_width, 13,
+                (190, 207, 226)
             )
-            screen.blit(rendered, (x, 260))
+            screen.blit(surface, (left, y))
+            y += 20
 
-        # Truth table rows
-        for index, row in enumerate(self.truth_table):
-            y = 300 + index * 43
+        y += 2
 
-            # Highlight the currently selected row.
-            if index == self.selected_row:
-                pygame.draw.rect(
-                    screen,
-                    settings.PANEL_BLUE,
-                    pygame.Rect(75, y - 5, 445, 36),
-                    border_radius=5
+        pygame.draw.line(
+            screen, (48, 75, 105),
+            (left, y), (right, y), 2
+        )
+        y += 10
+
+        # 5. Gate selector.
+        self._draw_text(
+            screen, "SELECT THE LOGIC GATE",
+            left, y,
+            (0, 229, 239), self.font
+        )
+        y += 27
+
+        gap = 14
+        gate_width = (content_width - gap) // 2
+        gate_height = 31
+
+        and_rect = pygame.Rect(
+            left, y, gate_width, gate_height
+        )
+        or_rect = pygame.Rect(
+            left + gate_width + gap, y,
+            gate_width, gate_height
+        )
+
+        # Both buttons are grey until selected.
+        neutral = (104, 115, 132)
+        selected = (0, 218, 231)
+
+        and_color = (
+            selected if self.selected_gate == "AND"
+            else neutral
+        )
+        or_color = (
+            selected if self.selected_gate == "OR"
+            else neutral
+        )
+
+        for rect, color in (
+            (and_rect, and_color),
+            (or_rect, or_color),
+        ):
+            pygame.draw.rect(
+                screen, (8, 23, 38), rect
+            )
+            pygame.draw.rect(screen, color, rect, 3)
+
+        and_label = self._make_font(13).render(
+            "[A] AND GATE", False, and_color
+        )
+        or_label = self._make_font(13).render(
+            "[O] OR GATE", False, or_color
+        )
+
+        screen.blit(
+            and_label,
+            and_label.get_rect(center=and_rect.center)
+        )
+        screen.blit(
+            or_label,
+            or_label.get_rect(center=or_rect.center)
+        )
+
+        y += gate_height + 9
+
+        # 6. Circuit table.
+        self._draw_text(
+            screen, "CIRCUIT CONFIGURATION",
+            left, y,
+            (255, 184, 72), self.font
+        )
+        y += 25
+
+        # Wider table, but keep a margin on the right.
+        table_width = int(content_width * 0.92)
+        col_widths = [
+            int(table_width * 0.27),
+            int(table_width * 0.25),
+            int(table_width * 0.25),
+        ]
+        col_widths.append(
+            table_width - sum(col_widths)
+        )
+
+        col_x = [left]
+        for col_width in col_widths:
+            col_x.append(col_x[-1] + col_width)
+
+        headers = ["ROW", "A", "B", "OUTPUT"]
+        header_height = 25
+        row_height = 29
+
+        # Header cells and borders.
+        for col, label in enumerate(headers):
+            cell = pygame.Rect(
+                col_x[col], y,
+                col_widths[col], header_height
+            )
+
+            pygame.draw.rect(
+                screen, (13, 29, 44), cell
+            )
+            pygame.draw.rect(
+                screen, (44, 103, 125), cell, 2
+            )
+
+            label_surface = self._fit_text(
+                label, col_widths[col] - 10,
+                14, (255, 184, 72)
+            )
+
+            screen.blit(
+                label_surface,
+                label_surface.get_rect(
+                    midleft=(cell.x + 6, cell.centery)
                 )
-
-            output = (
-                "_"
-                if row["answer"] is None
-                else str(row["answer"])
             )
 
+        y += header_height
+
+        # Body cells with complete grid lines.
+        for index, row in enumerate(self.truth_table):
             values = [
-                (str(index + 1), 105),
-                (str(row["a"]), 225),
-                (str(row["b"]), 315),
-                (output, 440),
+                str(index + 1),
+                str(row["a"]),
+                str(row["b"]),
+                (
+                    "—" if row["answer"] is None
+                    else str(row["answer"])
+                ),
             ]
 
-            for value, x in values:
-                color = (
-                    settings.CYAN
-                    if index == self.selected_row
-                    else settings.WHITE
+            is_selected = index == self.selected_row
+
+            for col, value in enumerate(values):
+                cell = pygame.Rect(
+                    col_x[col], y,
+                    col_widths[col], row_height
                 )
 
-                rendered = self.font.render(
-                    value, True, color
+                fill = (
+                    (14, 43, 58)
+                    if is_selected
+                    else (7, 17, 31)
                 )
-                screen.blit(rendered, (x, y))
 
-        # Gate selection information
-        gate_label = (
-            f"Selected gate: {self.selected_gate or 'None'}"
-        )
+                border = (
+                    (0, 205, 220)
+                    if is_selected
+                    else (40, 83, 105)
+                )
 
-        screen.blit(
-            self.font.render(
-                gate_label, True, settings.GREEN
-            ),
-            (575, 290)
-        )
+                pygame.draw.rect(screen, fill, cell)
+                pygame.draw.rect(
+                    screen, border, cell,
+                    2 if is_selected else 1
+                )
 
-        screen.blit(
-            self.small_font.render(
-                "A = AND gate",
-                True,
-                settings.WHITE
-            ),
-            (575, 335)
-        )
+                text_color = (
+                    (0, 235, 239)
+                    if is_selected
+                    else (220, 232, 245)
+                )
 
-        screen.blit(
-            self.small_font.render(
-                "O = OR gate",
-                True,
-                settings.WHITE
-            ),
-            (575, 365)
-        )
+                value_surface = self._fit_text(
+                    value, col_widths[col] - 10,
+                    14, text_color
+                )
 
-        # Feedback message
-        message_lines = self._wrap_message(
-            self.message, 43
-        )
+                screen.blit(
+                    value_surface,
+                    value_surface.get_rect(
+                        midleft=(cell.x + 6, cell.centery)
+                    )
+                )
 
-        for index, line in enumerate(message_lines):
-            rendered = self.small_font.render(
-                line, True, settings.YELLOW
-            )
-            screen.blit(
-                rendered,
-                (55, 500 + index * 25)
+            y += row_height
+
+        # 7. Alarm result. It remains visible after the first
+        # Enter on success, until the second Enter exits.
+        if self.submitted:
+            status_text = (
+                "ALARM HAS BEEN ACTIVATED!"
+                if self.alarm_activated
+                else "ALARM IS STILL IN DEACTIVATED MODE!"
             )
 
-        if self.solved:
-            status = "LEVEL 1 COMPLETE"
+            status_surface = self._fit_text(
+                status_text,
+                content_width,
+                15,
+                (255, 220, 65),
+            )
 
-            color = settings.GREEN
+            status_y = y + 9
+            status_height = status_surface.get_height()
 
-        else:
-            status = "Awaiting correct answer"
+            # Keep the status completely inside the screen panel.
+            max_status_y = (
+                panel.bottom - status_height - 12
+            )
+            status_y = min(status_y, max_status_y)
 
-            color = settings.GREY
+            if int(self.elapsed_time * 2.5) % 2 == 0:
+                screen.blit(
+                    status_surface,
+                    (left, status_y)
+                )
 
-        screen.blit(
-            self.small_font.render(
-                status, True, color
-            ),
-            (575, 420)
-        )
+        # Show the confirmation hint after successful activation.
+        if self.awaiting_exit_confirmation:
+            hint = self._fit_text(
+                "PRESS ENTER AGAIN TO CONTINUE",
+                content_width,
+                12,
+                (190, 207, 226),
+            )
 
-    def _wrap_message(self, message, max_length):
-        """Split feedback into lines that fit the interface."""
+            hint_y = panel.bottom - hint.get_height() - 8
 
-        words = message.split()
-        lines = []
-        current_line = ""
+            # Avoid drawing the hint on top of the alarm status.
+            if self.submitted:
+                hint_y = max(
+                    hint_y,
+                    min(y + 29, panel.bottom - hint.get_height() - 8)
+                )
 
-        for word in words:
-            candidate = f"{current_line} {word}".strip()
+            screen.blit(hint, (left, hint_y))
 
-            if len(candidate) > max_length and current_line:
-                lines.append(current_line)
-                current_line = word
-            else:
-                current_line = candidate
-
-        if current_line:
-            lines.append(current_line)
-
-        return lines
+    # ---------------------------------------------------------
+    # RESET
+    # ---------------------------------------------------------
 
     def reset_attempt(self):
-        """Reset this puzzle without affecting other levels."""
-
         super().reset_attempt()
 
         for row in self.truth_table:
@@ -294,7 +610,12 @@ class LogicLockPuzzle(BasePuzzle):
 
         self.selected_row = 0
         self.selected_gate = None
+        self.solved = False
 
-        self.message = (
-            "Try the security circuit again."
-        )
+        self.submitted = False
+        self.alarm_activated = False
+        self.awaiting_exit_confirmation = False
+
+        self.elapsed_time = 0.0
+        self.message = ""
+        self.feedback_color = (255, 220, 65)
