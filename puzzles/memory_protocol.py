@@ -11,11 +11,13 @@
 #   A / B / C / D = Probe the security system
 #   R             = Reset the lamp
 #   H             = Show a hint
+#   UP / DOWN / mouse wheel = Scroll the Guard's Notes (if they overflow)
 
 import pygame
 from .base_puzzle import BasePuzzle
 from screen_borders import draw_pixel_monitor
-from puzzles.memory_protocol_circuits import MemoryProtocolCircuitMixin  # NEW
+from puzzles.memory_protocol_circuits import MemoryProtocolCircuitMixin
+from puzzles.scroll_box import ScrollBox   # NEW
 
 
 # ---------------------------------------------------------
@@ -37,7 +39,7 @@ GREY = (132, 151, 174)
 YELLOW = (255, 195, 50)
 
 
-# CHANGED: mixin goes first so its draw() is the one that runs
+# mixin goes first so its draw() is the one that runs
 class MemoryProtocolPuzzle(MemoryProtocolCircuitMixin, BasePuzzle):
     """Deduce the hidden security system using the state lamp."""
 
@@ -67,11 +69,28 @@ class MemoryProtocolPuzzle(MemoryProtocolCircuitMixin, BasePuzzle):
     }
 
     CLUES = [
-        "1. There are RED, AMBER, BLUE, VIOLET, and GREEN lamps. Watch carefully!",
-        "2. Steady or pulsating? A steady lamp means the first state of that colour. A pulsating lamp means the second state. Remember, two lamps can share the same colour!",
-        "3. My bad habit: I have never pressed the same button twice in a row. Be careful!",
-        "4. Stay alert, detective! Wrong moves trigger an ALARM. Three alarms will wipe your notebook.",
-        "TIP: Press H anytime for a hint. Use your notebook to track what you discover!",
+        "WHAT IS THIS LEVEL ABOUT? This lock is a machine that remembers "
+        "where it is. Press a button and the lamp may change colour. Your "
+        "job: find out which button does what, and write it down.",
+
+        "YOUR GOAL: The lock has 7 states (7 lamp positions). You start at "
+        "RED, and the last state is GREEN. Reach GREEN to open the lock.",
+
+        "WHY? Real keypads and door locks work like this. They remember "
+        "which step you are on, and only open if you press the right "
+        "buttons in the right order. Later you will build this lock "
+        "yourself.",
+
+        "1. The lamp has 5 colours: RED, AMBER, BLUE, VIOLET and GREEN. "
+        "AMBER and BLUE each appear twice. A steady lamp is the first "
+        "one, a pulsing lamp is the second one.",
+
+        "2. I never press the same button twice in a row.",
+
+        "3. A wrong move sounds the ALARM. Three alarms wipe your notebook!",
+
+        "TIP: Press H for a hint. Your notebook fills itself in as you "
+        "discover things.",
     ]
 
     HINTS = [
@@ -100,7 +119,11 @@ class MemoryProtocolPuzzle(MemoryProtocolCircuitMixin, BasePuzzle):
         self.hint_index = 0
         self.awaiting_exit_confirmation = False
 
-        self._init_circuits()   # NEW: keep this as the LAST line
+        # NEW: scrollable Guard's Notes (UP/DOWN keys + mouse wheel)
+        self.notes_box = ScrollBox()
+        self.notes_area = None   # set every frame by _draw_probe
+
+        self._init_circuits()   # keep this as the LAST line
 
     # ---------------------------------------------------------
     # GAME LOGIC
@@ -160,7 +183,7 @@ class MemoryProtocolPuzzle(MemoryProtocolCircuitMixin, BasePuzzle):
                 )
 
         elif next_state == "OPEN":
-            # CHANGED: no longer finishes the level. Go to step 2.
+            # No longer finishes the level. Go to step 2.
             self.start_diagram_phase()
 
     def reset_lamp(self):
@@ -185,6 +208,17 @@ class MemoryProtocolPuzzle(MemoryProtocolCircuitMixin, BasePuzzle):
         # (including the mouse). This must come BEFORE the KEYDOWN filter.
         if self.circuit_handle_event(event):
             return
+
+        # NEW: scroll the Guard's Notes (UP/DOWN, PAGE UP/DOWN, mouse wheel).
+        # Must come BEFORE the KEYDOWN filter so the mouse wheel works.
+        if (
+            getattr(self, "phase", "PROBE") == "PROBE"
+            and self.notes_area is not None
+            and not self.solved
+            and not self.awaiting_exit_confirmation
+        ):
+            if self.notes_box.handle_event(event, self.notes_area):
+                return
 
         # PROBE step: keyboard only. Mouse clicks are ignored.
         if event.type != pygame.KEYDOWN:
@@ -283,7 +317,7 @@ class MemoryProtocolPuzzle(MemoryProtocolCircuitMixin, BasePuzzle):
     # PROBE SCREEN (your original draw, renamed)
     # ---------------------------------------------------------
 
-    def _draw_probe(self, screen):          # CHANGED: was draw()
+    def _draw_probe(self, screen):
         screen.fill(DARK_BLUE)
 
         # Shared Level 1 pixel-art monitor border.
@@ -325,7 +359,7 @@ class MemoryProtocolPuzzle(MemoryProtocolCircuitMixin, BasePuzzle):
 
         self._text(
             screen,
-            "■ SECURITY NETWORK // LEVEL THREE // STEP 1 OF 4",
+            "■ SECURITY NETWORK // LEVEL THREE",
             alert_font,
             alert_colour,
             X(35), Y(25)
@@ -363,27 +397,20 @@ class MemoryProtocolPuzzle(MemoryProtocolCircuitMixin, BasePuzzle):
         self._panel(screen, notes_rect, "GUARD'S NOTES", title_font)
         self._panel(screen, notebook_rect, "YOUR NOTEBOOK", title_font)
 
-        notes_x = notes_rect.x + W(16)
-        notes_y = notes_rect.y + H(49)
-        notes_width = notes_rect.width - W(32)
-        notes_bottom = notes_rect.bottom - H(12)
-
-        note_line_height = H(22)
-        note_gap = H(7)
-
-        for index, note in enumerate(self.CLUES):
-            available = notes_bottom - notes_y
-
-            if available <= 0:
-                break
-
-            used = self._wrapped_text(
-                screen, note, notes_font, WHITE,
-                notes_x, notes_y,
-                notes_width, note_line_height, available
-            )
-
-            notes_y += used + note_gap
+        # Guard's Notes: scrollable area under the panel title.
+        # UP/DOWN keys and the mouse wheel scroll it; a thin scrollbar
+        # appears only when the text does not fit.
+        notes_text_rect = pygame.Rect(
+            notes_rect.x + W(16),
+            notes_rect.y + H(49),
+            notes_rect.width - W(32),
+            notes_rect.bottom - H(12) - (notes_rect.y + H(49)),
+        )
+        self.notes_area = notes_text_rect
+        self.notes_box.draw(
+            screen, notes_text_rect, self.CLUES, notes_font, WHITE,
+            line_h=H(22), para_gap=H(7), scroll_colour=CYAN,
+        )
 
         book_x = notebook_rect.x + W(16)
         book_y = notebook_rect.y + H(51)
@@ -515,5 +542,5 @@ class MemoryProtocolPuzzle(MemoryProtocolCircuitMixin, BasePuzzle):
             status_width, H(23), status_height
         )
 
-        # CHANGED: pygame.display.update() removed.
+        # pygame.display.update() was removed on purpose.
         # The "ACCESS GRANTED" screen now lives in the BUILD step.

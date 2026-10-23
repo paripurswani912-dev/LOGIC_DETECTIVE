@@ -1,4 +1,3 @@
-
 # notebook.py
 # Logic Detective — NEXUS-9 Investigation Notebook
 #
@@ -8,6 +7,14 @@
 #   ENTER             Open selected page
 #   ESC / BACKSPACE   Return to index / close notebook
 #   Mouse click       Select buttons and open pages
+#   H                 (on a level page) reveal the next hint
+#   P                 (on a level page) open the matching practice lab
+#
+# STATE MACHINES lab keys:
+#   A B C             press that button        1-4  pick a state (PREDICT)
+#   R                 reset                    P    PREDICT mode
+#   V                 diagram <-> circuit      T    lab <-> notes
+#   UP / DOWN / WHEEL scroll the lab           ESC / BACKSPACE  go back
 #
 # Integration:
 #   notebook = DetectiveNotebook()
@@ -15,7 +22,16 @@
 #   notebook.draw(screen)
 #   notebook.complete_level(level_id, notes)
 
+import itertools
+import math
+import random
 import pygame
+
+# The Boolean Algebra lab reuses the circuit simulator + mouse workbench.
+try:
+    from puzzles.circuit_engine import Circuit, Component, Workbench
+except ImportError:
+    from circuit_engine import Circuit, Component, Workbench
 
 
 # ------------------------------------------------------------
@@ -37,6 +53,7 @@ GOLD = DARK_GREEN
 WHITE = (242, 241, 231)
 LOCKED = (99, 103, 111)
 PAGE_LINE = (156, 163, 168)
+TEAL = (0, 91, 103)
 
 
 class DetectiveNotebook:
@@ -50,45 +67,108 @@ class DetectiveNotebook:
         ("level_six", "LEVEL SIX", "Signal Breaker"),
     ]
 
-    # These are excerpts from the scientist's case notes. They are shown
+    # Plain-language excerpts from the scientist's case notes. They are shown
     # when the relevant level becomes unlocked, before the detective solves it.
+    # Every new word is explained the first time it is used.
     SCIENTIST_NOTES = {
         "level_one": [
             "Lab log: Entry 01",
-            "The security lock is built from basic logic gates. I have been checking its input-output behaviour after the security AI began rejecting normal access requests.",
-            "The AI has sealed the laboratory. My access attempts are being logged, and I am increasingly concerned that the system is no longer following my original instructions.",
-            "If anyone reviews this investigation, start by examining the lock's behaviour carefully. Do not trust the status messages displayed by the terminal.",
+            "A LOGIC GATE is a tiny decision box. It gets switches that are ON (1) or OFF (0), and decides if its answer is ON or OFF.",
+            "Think of a door that opens only if BOTH keys are turned. That rule is called an AND gate.",
+            "The lock should work like AND, but the AI says DENIED. Test all 4 switch combinations (00, 01, 10, 11) and write down the lock's answer each time.",
+            "A list of every input and its answer is called a TRUTH TABLE. Practise one in TEST THE LOGIC > LOGIC GATES.",
         ],
         "level_two": [
             "Lab log: Entry 02",
-            "The next terminal is receiving a transmission that does not appear to use ordinary decimal notation. I recorded the raw bit pattern before the AI cleared the display.",
-            "Some values appear to have been encoded in Gray code. The change between adjacent values may be important for reconstructing the message.",
-            "I could not finish decoding it before the doors locked. The conversion steps should reveal whether the message has been altered.",
+            "Computers write numbers with only 0 and 1. That is called BINARY. Each 0 or 1 is one BIT. Example: 101 means 4 + 0 + 1 = 5.",
+            "Some numbers on the terminal are in GRAY CODE. It is binary written a special way, so each number differs from the next in only ONE bit.",
+            "To read the message: first turn each Gray code into normal binary, then turn that binary into a normal number. Keep the original order.",
+            "Do not do it in your head. TEST THE LOGIC > NUMBER SYSTEMS shows every step. Forgot a word? See WORDS TO KNOW.",
         ],
         "level_three": [
             "Lab log: Entry 03",
-            "The memory protocol controls a sequence of states. The indicator lamps advance only when the correct input is present at the clock edge.",
-            "I observed the AI repeating transitions that were not part of my original test sequence. I have left the state labels visible so the sequence can be checked manually.",
-            "Record the current state, the input, and the next state. A single incorrect transition can prevent the system from reaching its safe condition.",
+            "A STATE is where the machine is right now, like a traffic light being RED or GREEN. This machine has states named A, B, C and D.",
+            "It works like a board game. You stand on a square (the state). You get an INPUT (0 or 1). A rule table says which square to move to next.",
+            "For every step write three things: where am I, what is the input, where do I go next. Follow the table row by row.",
+            "One wrong step and the machine never reaches the safe state. Read about it in TEST THE LOGIC > STATE MACHINES.",
         ],
         "level_four": [
             "Lab log: Entry 04",
-            "The override terminal evaluates a Boolean expression before accepting a command. The AI has started displaying expressions that look plausible but do not always behave as expected.",
-            "I suspect the override check is comparing the submitted expression against the original truth table, not just its appearance.",
-            "Check every input combination before trusting a simplified form. A mismatch on even one row should be treated as a failed override.",
+            "A BOOLEAN EXPRESSION is a short sentence about switches, like 'A AND B'. Two expressions can look different but do exactly the same job.",
+            "The AI shows me an expression that looks right, but I do not trust it. It may only look similar.",
+            "To check, try EVERY switch combination and compare the results with the original. If even one row is different, it is a fake.",
+            "The rules for rewriting an expression (like DE MORGAN'S LAW) are in TEST THE LOGIC > BOOLEAN ALGEBRA. You can also build it there.",
         ],
         "level_five": [
             "Lab log: Entry 05",
-            "The vault alarm is controlled by a small combinational network. I copied the required output function into the terminal before the security AI restricted access.",
-            "The gate editor allows wires to be moved, but careless routing can make the diagram difficult to inspect. The output must match the required function for every specified input combination.",
-            "Use the simplest valid arrangement you can build, then test the live output rather than relying on the wire colours alone.",
+            "A CIRCUIT is gates joined by wires. The alarm needs one. The formula F = ... is the recipe that says when the alarm should turn ON.",
+            "Build it like LEGO: switches on the left, gates in the middle, the last gate wired into the alarm lamp on the right.",
+            "Then flip the switches and check the lamp against the formula. Fewer gates is better. A Karnaugh map (see the notebook) can make the formula shorter first.",
         ],
         "level_six": [
             "Lab log: Entry 06",
-            "The final terminal uses a five-cell shift register to generate a key stream. The seed and feedback taps determine the sequence produced by the machine.",
-            "The intercepted header can be used to check whether the generator has been configured correctly. The payload should only be decoded after the generated stream matches the expected sequence.",
-            "I have documented the register connections and left the timing trace available. Follow the shift operation one clock pulse at a time and verify the output before attempting decryption.",
+            "The last message is SCRAMBLED, which means hidden with a secret code. To scramble, flip some bits using a secret pattern. Flip again with the SAME pattern and the message comes back.",
+            "The machine makes that secret pattern. It is a row of 5 boxes (a REGISTER), each holding 0 or 1. On every CLOCK pulse, all bits move one box right and a new bit enters on the left.",
+            "The new bit comes from the boxes marked TAP. Their bits are mixed with XOR (same = 0, different = 1). The 5 bits the machine starts with are the SEED.",
+            "A short test message shows if the machine is set up correctly. Pulse one step at a time and match it first. Only then unscramble the real message.",
+            "Scramble example: 1011 XOR 0110 = 1101. Then 1101 XOR 0110 = 1011. Practise in TEST THE LOGIC > REGISTERS AND LFSRs.",
         ],
+    }
+
+    # One plain sentence: what the player has to achieve.
+    LEVEL_GOALS = {
+        "level_one": "Find out what the lock really does for all 4 switch combinations, and make it behave like AND.",
+        "level_two": "Turn the Gray-code numbers into normal decimal numbers, in the right order.",
+        "level_three": "Follow the machine one step at a time until it reaches the safe state.",
+        "level_four": "Find which expression gives the SAME answers as the original on every row.",
+        "level_five": "Build the alarm circuit so the lamp matches the formula F for every switch combination.",
+        "level_six": "Set the SEED and TAPS so the machine matches the test message, then unscramble the real message.",
+    }
+
+    # Hints go from gentle to strong. The player reveals them one at a time.
+    LEVEL_HINTS = {
+        "level_one": [
+            "Start small. A gate has 2 switches, so there are only 4 combinations. Write them in a list: 00, 01, 10, 11.",
+            "For each combination ask: is the lock ON? An AND gate is ON only when BOTH switches are 1.",
+            "Your 4 answers, in order, make a pattern of 0s and 1s. For AND, only the LAST answer is 1.",
+        ],
+        "level_two": [
+            "Take the numbers one at a time. Look at the Gray code first and convert it. Ignore the rest until that works.",
+            "Gray to binary: copy the first bit. Each next binary bit = the previous binary bit XOR this Gray bit. (XOR: same = 0, different = 1.)",
+            "Example: Gray 1000 gives 1, then 1^0=1, 1^0=1, 1^0=1, so binary 1111 = 15. Now do yours and keep the original order.",
+        ],
+        "level_three": [
+            "Find the row for your current state in the table. Then look at the column for the input. That cell is the next state.",
+            "Write each step like this: A, input 1, go to B. Keep the list of states you visit, in order.",
+            "If a state has no rule for the input, you took a wrong turn earlier. Go back one step and check it again.",
+        ],
+        "level_four": [
+            "Do not judge by how an expression looks. Make a table with one row for every input combination.",
+            "Work out the original expression on each row first. Then do the same for the other one. The laws in BOOLEAN ALGEBRA help you simplify.",
+            "De Morgan's law: break the bar and swap AND with OR. (AB)' = A' + B' and (A+B)' = A'B'. Use it when a bar covers a whole bracket.",
+            "XNOR is the opposite of XOR: it is 1 when two inputs MATCH, so A XNOR B = AB + A'B'. If even one row differs, that expression is a fake.",
+        ],
+        "level_five": [
+            "First list every input combination where the alarm must be ON. Mark those cells 1 on the Karnaugh map.",
+            "Circle the 1s in the biggest rectangles of 1, 2, 4 or 8 cells. The map wraps around the edges. Fewer, bigger groups mean fewer gates.",
+            "Each group is one term. A letter that stays 1 is kept, one that stays 0 gets a bar ('), and one that changes is dropped. Join the terms with OR.",
+        ],
+        "level_six": [
+            "Do not decode the real message yet. First make the machine produce the test message pattern.",
+            "Each pulse: XOR the TAP cells, shift every bit one cell to the right, put the new bit in CELL 1. The bit leaving CELL 5 is the OUTPUT.",
+            "Write the 5 cells down after every pulse. If the output does not match the test message, change the SEED or the TAPS and start again.",
+            "When it matches, XOR the real scrambled message with the same output bits, one bit at a time.",
+        ],
+    }
+
+    # Which TEST THE LOGIC topic belongs to each level.
+    LEVEL_PRACTICE = {
+        "level_one": "LOGIC GATES",
+        "level_two": "NUMBER SYSTEMS",
+        "level_three": "STATE MACHINES",
+        "level_four": "BOOLEAN ALGEBRA",
+        "level_five": "KARNAUGH MAPS",
+        "level_six": "REGISTERS AND LFSRs",
     }
 
     DEFAULT_FINDINGS = {
@@ -114,10 +194,87 @@ class DetectiveNotebook:
             "Required function: F = B'D' + BD + C'D'.",
         ],
         "level_six": [
-            "I restored the five-cell signal register, set the seed, connected the feedback path, and checked the generated stream against the intercepted header before decrypting the payload.",
+            "I restored the five-cell signal register, set the seed, connected the feedback path, and checked the generated stream against the intercepted header before unscrambling the message.",
             "Recovered key: K7. Register seed: 01101.",
         ],
     }
+
+    # Goal expressions for the Boolean Algebra lab (TEST mode). "f" takes the
+    # input bits in the order of "vars" and returns the required output.
+    BOOL_GOALS = [
+        {"expr": "A'B + AB'", "vars": ["A", "B"],
+         "f": lambda a, b: ((1 - a) & b) | (a & (1 - b))},
+        {"expr": "(A·B)'", "vars": ["A", "B"],
+         "f": lambda a, b: 1 - (a & b)},
+        {"expr": "A + A'B", "vars": ["A", "B"],
+         "f": lambda a, b: a | ((1 - a) & b)},
+        {"expr": "A'B' + AB", "vars": ["A", "B"],
+         "f": lambda a, b: ((1 - a) & (1 - b)) | (a & b)},
+        {"expr": "(A + B)·C'", "vars": ["A", "B", "C"],
+         "f": lambda a, b, c: (a | b) & (1 - c)},
+        {"expr": "AB + C", "vars": ["A", "B", "C"],
+         "f": lambda a, b, c: (a & b) | c},
+        {"expr": "(A XOR B)·C", "vars": ["A", "B", "C"],
+         "f": lambda a, b, c: (a ^ b) & c},
+        {"expr": "A'B'C + ABC'", "vars": ["A", "B", "C"],
+         "f": lambda a, b, c: ((1 - a) & (1 - b) & c) | (a & b & (1 - c))},
+    ]
+    BOOL_PALETTE = ["AND", "OR", "NOT", "XOR", "NAND", "NOR", "XNOR"]
+    BOOL_MAX_GATES = 10
+    # SIMULATE mode: the player picks how many input switches (A, B, C, D).
+    BOOL_MIN_VARS = 2
+    BOOL_MAX_VARS = 4
+    BOOL_VAR_NAMES = "ABCD"
+
+    # Karnaugh map lab: rows are AB and columns are CD in Gray-code order.
+    KM_GRAY = [0, 1, 3, 2]
+    KM_LABELS = ["00", "01", "11", "10"]
+    KM_VARS = "ABCD"
+    KM_COLOURS = [
+        (200, 40, 60), (210, 140, 0), (0, 130, 190),
+        (130, 60, 200), (30, 150, 80), (210, 60, 150),
+    ]
+    # Simulate-mode examples: (name, ones, don't-cares)
+    KM_EXAMPLES = [
+        ("1s at m13, m14, m15", {13, 14, 15}, set()),
+        ("A=1, B=1, C=1 (m14, m15)", {14, 15}, set()),
+        ("the four corners (wraparound)", {0, 2, 8, 10}, set()),
+        ("whole bottom half: A=1", {8, 9, 10, 11, 12, 13, 14, 15}, set()),
+        ("two separate groups", {0, 1, 8, 9, 6, 7, 14, 15}, set()),
+        ("using X (don't-care) cells", {3, 7, 11}, {15, 2}),
+    ]
+    # Test-mode maps: the player groups them. (None of these is Level 5.)
+    KM_TESTS = [
+        {"ones": {5, 7, 13, 15}, "dc": set()},
+        {"ones": {0, 2, 8, 10}, "dc": set()},
+        {"ones": {12, 13, 14, 15}, "dc": set()},
+        {"ones": {1, 3, 5, 7, 9, 11}, "dc": set()},
+        {"ones": {2, 3, 6, 7, 10}, "dc": {11, 14}},
+        {"ones": {0, 1, 4, 5, 6, 14}, "dc": {7}},
+    ]
+
+    # --------------------------------------------------------
+    # STATE MACHINE LAB DATA
+    # --------------------------------------------------------
+    # A tiny machine that works exactly like the Level 3 lock:
+    #   RED (start) --A--> AMBER --B--> BLUE --C--> GREEN
+    # Pressing A always starts a fresh ball at AMBER. Any other wrong
+    # button drops the machine back to RED.
+    SM_STATES = ["RED", "AMBER", "BLUE", "GREEN"]
+    SM_COLOURS = {
+        "RED": (200, 50, 60),
+        "AMBER": (214, 140, 20),
+        "BLUE": (45, 110, 205),
+        "GREEN": (40, 165, 100),
+    }
+    # (state the ball must be in, button needed, state it hops to)
+    SM_STEPS = [
+        ("RED", "A", "AMBER"),
+        ("AMBER", "B", "BLUE"),
+        ("BLUE", "C", "GREEN"),
+    ]
+    SM_BUTTONS = "ABC"
+    SM_SCROLL_STEP = 30               # pixels per key press / wheel notch
 
     def __init__(self):
         # One source of truth for the open state.
@@ -141,7 +298,12 @@ class DetectiveNotebook:
             for index, (level_id, _, _) in enumerate(self.LEVELS)
         }
 
+        # Hints the player has revealed so far, per level.
+        self.hints_shown = {level_id: 0 for level_id, _, _ in self.LEVELS}
+        self._jump_to_hints = False
+
         self.reference_topics = [
+            "WORDS TO KNOW",
             "LOGIC GATES",
             "NUMBER SYSTEMS",
             "STATE MACHINES",
@@ -151,6 +313,58 @@ class DetectiveNotebook:
         ]
 
         self.reference_notes = {
+            # Plain-words glossary for players who are new to all of this.
+            "WORDS TO KNOW": [
+                "BIT",
+                "- One 0 or 1. The smallest piece of information.",
+                "BINARY",
+                "- Writing numbers with only 0 and 1. Example: 101 = 4 + 0 + 1 = 5.",
+                "INPUT AND OUTPUT",
+                "- INPUT is what goes in (a switch). OUTPUT is the answer that comes out (a lamp).",
+                "ON AND OFF",
+                "- ON = 1 = true. OFF = 0 = false.",
+                "LOGIC GATE",
+                "- A tiny decision box. Inputs go in, one output comes out.",
+                "- AND: ON only if ALL inputs are ON.",
+                "- OR: ON if ANY input is ON.",
+                "- NOT: flips ON to OFF and OFF to ON.",
+                "- XOR: ON only if the two inputs are DIFFERENT.",
+                "- XNOR: ON only if the two inputs MATCH.",
+                "TRUTH TABLE",
+                "- A list of every input combination and the output for each one.",
+                "CIRCUIT",
+                "- Gates joined by wires, from the switches to a lamp.",
+                "GRAY CODE",
+                "- Binary written so each number differs from the next by only one bit.",
+                "STATE",
+                "- Where a machine is right now, like RED or GREEN on a traffic light.",
+                "TRANSITION",
+                "- A move from one state to the next, caused by an input.",
+                "CLOCK",
+                "- A regular beat. Each pulse makes the machine take one step.",
+                "BOOLEAN EXPRESSION",
+                "- A short formula about 0s and 1s.",
+                "- A' means NOT A. AB means A AND B. A+B means A OR B.",
+                "EQUIVALENT",
+                "- Two expressions are equivalent if they give the same output on EVERY row.",
+                "DE MORGAN'S LAW",
+                "- A rule for moving a NOT bar. Break the bar and swap AND with OR.",
+                "- (AB)' = A' + B'   and   (A+B)' = A'B'.",
+                "SIMPLIFY",
+                "- Rewrite an expression with fewer gates, but the same answers.",
+                "REGISTER",
+                "- A row of boxes. Each box holds one bit.",
+                "SEED",
+                "- The 5 bits a register starts with.",
+                "TAP",
+                "- A box whose bit is sent into the XOR gate.",
+                "FEEDBACK",
+                "- The XOR result. It enters CELL 1 on the next pulse.",
+                "SCRAMBLING (SECRET CODE)",
+                "- Hiding a message by flipping its bits with a secret pattern.",
+                "- Flip again with the same pattern and the message comes back.",
+                "- The real name is CIPHER. You do not need that word to play.",
+            ],
             # Keep the existing interactive Logic Gates prototype unchanged.
             "LOGIC GATES": [
                 "AND: output is 1 when both inputs are 1.",
@@ -162,72 +376,202 @@ class DetectiveNotebook:
                 "XNOR: output is 1 when inputs match.",
             ],
             "NUMBER SYSTEMS": [
-                "BINARY",
-                "- Uses only 0 and 1.",
-                "- Each position is a power of 2, from right to left:",
-                "  2^0, 2^1, 2^2, 2^3, and so on.",
-                "- Convert binary to decimal by adding the place",
-                "  values whose bits are 1.",
+                "WHAT IS A NUMBER SYSTEM?",
+                "- A way of writing numbers using a fixed set of digits.",
+                "- The BASE is how many different digits it uses.",
+                "- DECIMAL (base 10) uses 0-9. We use it every day.",
+                "- BINARY (base 2) uses only 0 and 1.",
+                "- HEX (base 16) uses 0-9 and A-F (A=10 ... F=15).",
+                "WHAT IS BINARY?",
+                "- Computers use it: a wire is OFF (0) or ON (1).",
+                "- One binary digit is a BIT.",
+                "- Each position has a place value, doubling to the left:",
+                "  1, 2, 4, 8, 16, 32, 64, 128.",
+                "- 4 bits hold 0 to 15. 8 bits hold 0 to 255.",
+                "BINARY TO DECIMAL",
+                "- Write the place value above each bit.",
+                "- Add the place values where the bit is 1.",
+                "- Example: 1010 = 8 + 2 = 10.",
+                "DECIMAL TO BINARY",
+                "- Divide by 2 again and again. Note each remainder.",
+                "- Stop when the number reaches 0.",
+                "- Read the remainders from LAST to FIRST.",
+                "- Example: 13 gives remainders 1,0,1,1 -> 1101.",
+                "BINARY AND HEX",
+                "- Group the bits in fours. Each group is one hex digit.",
+                "- Example: 1111 0101 = F5 (1111 = 15 = F, 0101 = 5).",
                 "GRAY CODE",
-                "- Adjacent Gray-code values differ by one bit.",
-                "- Gray to binary: copy the first Gray bit.",
-                "- Each next binary bit = previous binary bit XOR",
-                "  the current Gray bit.",
-                "- Binary to Gray: copy the first binary bit, then",
-                "  XOR each binary bit with the bit immediately before it.",
+                "- Neighbouring numbers differ by only ONE bit.",
+                "- Used where a change of many bits at once is risky.",
+                "GRAY TO BINARY",
+                "- Copy the first bit.",
+                "- Each next BINARY bit = the previous BINARY bit",
+                "  XOR this GRAY bit.",
+                "- Example: Gray 0110 -> 0, 0^1=1, 1^1=0, 0^0=0",
+                "  -> binary 0100 = 4.",
+                "BINARY TO GRAY",
+                "- Copy the first bit.",
+                "- Each next GRAY bit = this BINARY bit XOR the",
+                "  BINARY bit before it.",
+                "TIP",
+                "- Open the lab (T) and convert any value to see",
+                "  every step worked out for you.",
             ],
             "STATE MACHINES": [
-                "- A state stores the system's current condition.",
-                "- A transition moves the machine from one state to another.",
-                "- The next state depends on the current state and input.",
-                "- Read the transition table row for the current state",
-                "  and input to find the next state.",
-                "- A clocked machine updates state at the active clock edge.",
-                "- Trace one clock step at a time: current state, input,",
-                "  next state, and output.",
-                "- An invalid or missing transition can block the required sequence.",
+                "WHAT IS A STATE MACHINE?",
+                "- It is a machine that is always in ONE state, like a lamp that is RED, AMBER, BLUE or GREEN.",
+                "- You press a button. The machine looks at its rule table and moves to its next state.",
+                "THE THREE WORDS",
+                "- STATE: where the machine is right now (the lamp colour).",
+                "- INPUT: what you do to it (press A, B or C).",
+                "- TRANSITION: the move from one state to the next.",
+                "READING THE RULE TABLE",
+                "- Find the row for the state you are in.",
+                "- Find the column for the button you pressed.",
+                "- The box where they meet is the next state.",
+                "FINDING THE CODE (LEVEL 3 PROBE)",
+                "- Press every button in every state and write down what happens.",
+                "- Draw each result as an arrow between two states.",
+                "- The shortest path of arrows from the start to the goal is the secret code.",
+                "BUILDING IT WITH CIRCUITS (LEVEL 3 BUILD)",
+                "- Use one memory box (a flip-flop) for each state. Only one box holds the ball at a time.",
+                "- Each forward arrow becomes one AND gate. Think of it as a door guard: is the ball here, AND is the right button pressed?",
+                "- If both are yes, the guard lets the ball hop into the next box.",
+                "- The clock tick tells every box to update at the same moment.",
+                "- A wrong button: no guard says yes, the ball vanishes, and we are back at the start.",
+                "TIP",
+                "- Open the lab (T). Use PREDICT to test yourself, and CIRCUIT (V) to see the guards at work.",
             ],
             "BOOLEAN ALGEBRA": [
+                "BASICS",
                 "- Boolean variables can only be 0 (false) or 1 (true).",
-                "- AND: A·B is 1 only when both A and B are 1.",
+                "- AND: A·B (or AB) is 1 only when both A and B are 1.",
                 "- OR: A+B is 1 when at least one input is 1.",
                 "- NOT: A' reverses A; 0 becomes 1 and 1 becomes 0.",
                 "- XOR: A⊕B is 1 when the inputs differ.",
                 "- XNOR: A⊙B is 1 when the inputs match.",
-                "- De Morgan: (A·B)' = A' + B'.",
-                "- De Morgan: (A+B)' = A'·B'.",
-                "- Apply brackets first, then NOT, AND, OR unless",
-                "  brackets or the expression specify another order.",
+                "- XNOR is the opposite of XOR: (A⊕B)' = A⊙B.",
+                "- NAND is AND followed by NOT. NOR is OR followed by NOT.",
+                "ORDER OF OPERATIONS",
+                "- Brackets first, then NOT, then AND, then OR.",
+                "BASIC LAWS",
+                "- Identity: A+0 = A and A·1 = A.",
+                "- Null: A+1 = 1 and A·0 = 0.",
+                "- Idempotent: A+A = A and A·A = A.",
+                "- Complement: A+A' = 1 and A·A' = 0.",
+                "- Double negation: (A')' = A.",
+                "- Commutative: A+B = B+A and AB = BA.",
+                "- Associative: (A+B)+C = A+(B+C), same for AND.",
+                "- Distributive: A(B+C) = AB + AC.",
+                "- Distributive: A+BC = (A+B)(A+C).",
+                "ABSORPTION LAWS",
+                "- A + AB = A.",
+                "- A(A + B) = A.",
+                "- A + A'B = A + B.",
+                "- A(A' + B) = AB.",
+                "DE MORGAN'S LAWS",
+                "- (A·B)' = A' + B'   (NAND = NOT A OR NOT B).",
+                "- (A+B)' = A'·B'   (NOR = NOT A AND NOT B).",
+                "- Break the bar, and swap AND with OR.",
+                "XOR AND XNOR IN ALGEBRA",
+                "- A⊕B = A'B + AB'.",
+                "- A⊙B = AB + A'B'.",
+                "- A⊕0 = A, A⊕1 = A', A⊕A = 0, A⊕A' = 1.",
+                "FORMING A CIRCUIT FROM AN EXPRESSION",
+                "- Every variable is an input switch.",
+                "- Every operator in the expression becomes one gate.",
+                "- Start with the innermost brackets and work outward.",
+                "- The last operation feeds the output Y.",
+                "- A product term like A'B is a NOT on A feeding an AND with B.",
+                "- A sum of products (AB + CD) is ANDs feeding one OR.",
+                "- A bar over a whole bracket is a NOT, NAND or NOR gate.",
+                "CHECKING YOUR WORK",
                 "- Equivalent expressions must produce the same output",
                 "  for every possible input combination.",
+                "- Test every row of the truth table, not just one.",
+                "TIP",
+                "- Open the lab (T). In SIMULATE, pick 2, 3 or 4 variables,",
+                "  build any circuit and watch its equation appear. In TEST",
+                "  MODE, build the circuit for each goal expression.",
             ],
             "KARNAUGH MAPS": [
-                "- A K-map simplifies a Boolean function visually.",
-                "- Place the truth-table outputs into the correct cells.",
-                "- Group 1s in rectangles containing 1, 2, 4, 8, ... cells.",
-                "- Make groups as large as possible while covering every 1.",
-                "- Groups may overlap when it helps simplify the result.",
-                "- Opposite edges count as adjacent; groups can wrap around.",
-                "- Diagonal cells are not adjacent.",
-                "- A variable that changes within a group is eliminated.",
-                "- OR the simplified terms from all groups to form the result.",
+                "WHAT IS A K-MAP?",
+                "- A K-map is a truth table drawn as a grid.",
+                "- It lets you SEE which terms can be merged,",
+                "  so the equation gets shorter.",
+                "- This notebook uses 4 variables: A, B, C, D (16 cells).",
+                "THE GRID",
+                "- Rows are AB. Columns are CD.",
+                "- The order is 00, 01, 11, 10 (NOT 00, 01, 10, 11).",
+                "- Why: neighbouring cells then differ by only ONE variable.",
+                "- Every cell has a number, m0 to m15: the ABCD bits read",
+                "  as a binary number.",
+                "- Example: A=1 B=1 C=0 D=1 is 1101 = 13, so cell m13.",
+                "FILLING THE MAP",
+                "- Write 1 where the output is 1, and 0 everywhere else.",
+                "- X means DON'T CARE: you may use it as a 1, or ignore it.",
+                "GROUPING RULES",
+                "- Group only 1s (and Xs). NEVER put a 0 in a group.",
+                "- A group has 1, 2, 4, 8 or 16 cells. Never 3, 5, 6 or 7.",
+                "- A group is a straight rectangle: no diagonals, no L-shapes.",
+                "- Make every group as BIG as possible.",
+                "- Groups may overlap.",
+                "- The map WRAPS: left edge touches right edge, top touches",
+                "  bottom, and the four corners touch each other.",
+                "- Cover every 1 using as FEW groups as possible.",
+                "- Xs never have to be covered.",
+                "READING ONE GROUP",
+                "- Look at each variable (A, B, C, D) inside the group.",
+                "- It STAYS 1 in the whole group: write the letter, A.",
+                "- It STAYS 0 in the whole group: write the letter with a",
+                "  bar, A'.",
+                "- It CHANGES inside the group: leave it out.",
+                "- A group of 2 drops 1 variable, 4 drops 2, 8 drops 3,",
+                "  and 16 drops all 4 (F = 1).",
+                "- Bigger group = fewer letters = simpler term.",
+                "BUILDING THE EQUATION",
+                "- Write one term for each group.",
+                "- Join the terms with OR (+).",
+                "EXAMPLE: 1s AT m13, m14, m15",
+                "- Group {m13, m15}: A=1, B=1, D=1 stay. C changes.",
+                "  Term = ABD.",
+                "- Group {m14, m15}: A=1, B=1, C=1 stay. D changes.",
+                "  Term = ABC.",
+                "- F = ABD + ABC. (m15 is used twice. Overlap is fine.)",
+                "EXAMPLE: THE FOUR CORNERS",
+                "- m0, m2, m8, m10 wrap around to form ONE group of 4.",
+                "- B=0 and D=0 stay. A and C change.",
+                "- F = B'D'.",
+                "COMMON MISTAKES",
+                "- Using the order 00, 01, 10, 11 on the edges.",
+                "- Drawing a diagonal group, or a group of 3 or 6.",
+                "- Forgetting that the edges wrap around.",
+                "- Stopping at a small group when a bigger one exists.",
+                "- Using more groups than needed.",
+                "TIP",
+                "- Open the lab (T). In SIMULATE, click cells to make a map",
+                "  and see the groups and equation. In TEST MODE, find the",
+                "  groups yourself.",
             ],
             "REGISTERS AND LFSRs": [
-                "REGISTERS",
-                "- A flip-flop stores one bit: 0 or 1.",
-                "- A register is a group of flip-flops storing a bit pattern.",
-                "- On a clock pulse, bits shift according to the wiring.",
-                "- Check the shift direction and each cell's next value.",
-                "LFSR (LINEAR FEEDBACK SHIFT REGISTER)",
-                "- Feedback is calculated from selected register taps.",
-                "- XOR of the tapped bits produces the feedback bit.",
-                "- The feedback bit enters the specified end of the register.",
-                "- The seed is the initial register pattern.",
-                "- The seed and tap positions determine the generated sequence.",
-                "- To check a stream, record the register state and output",
-                "  after every clock pulse.",
-                "- For XOR-based stream encryption, plaintext XOR key bit",
-                "  gives ciphertext; ciphertext XOR key bit recovers plaintext.",
+                "THE REGISTER",
+                "- A flip-flop is a memory cell that stores one bit.",
+                "- A register is a row of cells (here: 5 cells).",
+                "- A CLOCK pulse moves every bit one cell to the RIGHT.",
+                "- The bit leaving CELL 5 is the OUTPUT bit.",
+                "THE NEW BIT",
+                "- A TAP is a cell whose bit is sent to the XOR gate.",
+                "- XOR gives 1 if its inputs differ, 0 if they match.",
+                "- The XOR result (FEEDBACK) enters CELL 1.",
+                "SEED, TAPS AND THE STREAM",
+                "- SEED = the starting pattern of the 5 cells.",
+                "- Same seed + same taps = the same output stream.",
+                "SECRET CODE (SCRAMBLING)",
+                "- To hide a message: message XOR key bit = scrambled bit.",
+                "- To get it back: scrambled bit XOR the same key bit",
+                "  = message bit again.",
+                "- Example: 1011 XOR 0110 = 1101. Then 1101 XOR 0110 = 1011.",
+                "- The real name for this is a stream cipher.",
             ],
         }
 
@@ -263,6 +607,70 @@ class DetectiveNotebook:
         self.selected_gate = "AND"
         self.gate_a = 0
         self.gate_b = 0
+
+        # Interactive LFSR lab (REGISTERS AND LFSRs page).
+        # Same convention as Level 6: 5 cells, shift RIGHT, output = CELL 5,
+        # feedback (XOR of the tapped cells) enters CELL 1.
+        self.tiny_font = self._font(12)
+        self.lfsr_seed = [1, 0, 0, 1, 0]      # demo values, not the puzzle's
+        self.lfsr_taps = {1, 4}               # CELL 2 and CELL 5
+        self.lfsr_hist = [list(self.lfsr_seed)]
+        self.lfsr_out = []
+        self.lfsr_count = 0
+        self.lfsr_predict = False
+        self.lfsr_streak = 0
+        self.lfsr_passed = False              # True after 5 correct predictions
+        self.lfsr_msg = ""
+        self.lfsr_msg_ok = True
+        self.lfsr_notes = False               # False = lab, True = text notes
+
+        # Number-systems converter lab (NUMBER SYSTEMS page).
+        # 0 = BINARY, 1 = DECIMAL, 2 = GRAY, 3 = HEX
+        self.num_from = 0
+        self.num_to = 1
+        self.num_text = "1011"                # demo value, not a puzzle value
+        self.num_msg = ""
+        self.num_notes = False                # False = lab, True = text notes
+        self.topic_scroll = 0                 # scroll for long text notes
+
+        # Boolean Algebra circuit lab (BOOLEAN ALGEBRA page).
+        # SIMULATE = build any circuit with 2-4 variables and watch its
+        # equation. TEST = rebuild a given goal expression.
+        self.bool_test = False                # False = simulate, True = test
+        self.bool_nvars = 3                   # SIMULATE: 2, 3 or 4 variables
+        self.bool_idx = 0                     # TEST: which goal expression
+        self.bool_notes = False               # False = lab, True = text notes
+        self.bool_benches = {}                # key -> (Circuit, Workbench)
+        self.bool_solved = set()              # TEST: goal indices matched
+        self.bool_msg = ""
+        self.bool_eq_cache = {}               # truth table -> simplest form
+
+        # Karnaugh map lab (KARNAUGH MAPS page).
+        self.km_all_groups = self._km_build_rects()
+        self.km_cache = {}
+        self.km_test = False                  # False = simulate, True = test
+        self.km_notes = False                 # False = lab, True = text notes
+        self.km_vals = [0] * 16               # 0, 1, 2 = X (simulate mode)
+        self.km_ex = 0
+        self.km_label = ""
+        self._km_load_example(0)
+        self.km_sel = set()                   # selected cells (test mode)
+        self.km_groups = []                   # saved groups (test mode)
+        self.km_test_idx = 0
+        self.km_streak = 0
+        self.km_passed = False
+        self.km_msg = ""
+        self.km_msg_ok = True
+
+        # Interactive STATE MACHINES lab
+        self.sm_notes = False          # False = lab, True = text notes
+        self.sm_predict = False        # PREDICT mode
+        self.sm_circuit = False        # False = diagram, True = circuit view
+        self.sm_q_state = "RED"        # state asked about in PREDICT mode
+        self.sm_q_btn = "A"            # button asked about in PREDICT mode
+        self.sm_scroll = 0             # pixel scroll of the lab's lower area
+        self.sm_max_scroll = 0         # measured while drawing
+        self._sm_reset("")
 
     # --------------------------------------------------------
     # FONTS AND TEXT
@@ -353,16 +761,47 @@ class DetectiveNotebook:
     # EVENTS
     # --------------------------------------------------------
 
-    
     def handle_event(self, event):
         """Handle notebook input before the game's normal controls."""
 
         if not self.open:
             return False
 
+        # Boolean lab: the mouse drives the circuit workbench.
+        if self._on_bool_lab() and event.type in (
+            pygame.MOUSEMOTION,
+            pygame.MOUSEBUTTONDOWN,
+            pygame.MOUSEBUTTONUP,
+        ):
+            if self._bool_mouse(event):
+                return True
+
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_n:
                 self.close()
+                return True
+
+            # Level page: H reveals the next hint, P opens the practice lab.
+            if self.page == "level":
+                if event.key == pygame.K_h:
+                    self._reveal_hint()
+                    return True
+                if event.key == pygame.K_p:
+                    self._practise_level()
+                    return True
+
+            if self._on_numbers_page() and self._num_handle_key(event):
+                return True
+
+            if self._on_bool_page() and self._bool_handle_key(event):
+                return True
+
+            if self._on_km_page() and self._km_handle_key(event):
+                return True
+
+            # STATE MACHINES lab: A/B/C are the machine's buttons, so these
+            # keys must be read before the notebook's own B = "back" key.
+            if self._on_sm_page() and self._sm_handle_key(event):
                 return True
 
             if event.key in (pygame.K_ESCAPE, pygame.K_BACKSPACE,
@@ -377,9 +816,14 @@ class DetectiveNotebook:
                     self.close()
                 return True
 
+            if self._on_lfsr_page() and self._lfsr_handle_key(event):
+                return True
+
             if event.key in (pygame.K_UP, pygame.K_w):
                 if self.page == "level":
                     self.notes_scroll = max(0, self.notes_scroll - 1)
+                elif self._topic_is_text():
+                    self.topic_scroll = max(0, self.topic_scroll - 1)
                 else:
                     self._move_selection(-1)
                 return True
@@ -387,6 +831,8 @@ class DetectiveNotebook:
             if event.key in (pygame.K_DOWN, pygame.K_s):
                 if self.page == "level":
                     self.notes_scroll += 1
+                elif self._topic_is_text():
+                    self.topic_scroll += 1
                 else:
                     self._move_selection(1)
                 return True
@@ -416,6 +862,16 @@ class DetectiveNotebook:
 
         if event.type == pygame.MOUSEWHEEL and self.page == "level":
             self.notes_scroll = max(0, self.notes_scroll - event.y)
+            return True
+
+        # STATE MACHINES lab: wheel scrolls the lower area in pixels.
+        if event.type == pygame.MOUSEWHEEL and self._on_sm_page() \
+                and not self.sm_notes:
+            self._sm_scroll_by(-event.y * self.SM_SCROLL_STEP)
+            return True
+
+        if event.type == pygame.MOUSEWHEEL and self._topic_is_text():
+            self.topic_scroll = max(0, self.topic_scroll - event.y)
             return True
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -457,12 +913,50 @@ class DetectiveNotebook:
         self.buttons = []
         self.selected_index = 0
 
-
     def _move_gate(self, direction):
         index = self.gate_names.index(self.selected_gate)
         index = (index + direction) % len(self.gate_names)
         self.selected_gate = self.gate_names[index]
 
+    def _open_topic(self, topic):
+        """Open a TEST THE LOGIC page, with every lab on its lab view."""
+        self.selected_level = topic
+        self.page = "reference_topic"
+        self.selected_index = 0
+        self.lfsr_notes = False
+        self.num_notes = False
+        self.bool_notes = False
+        self.bool_test = False
+        self.bool_msg = ""
+        self.km_notes = False
+        self.km_test = False
+        self.km_sel.clear()
+        self.km_groups.clear()
+        self.topic_scroll = 0
+        self.buttons = []
+        if topic == "STATE MACHINES":
+            self.sm_notes = False
+            self.sm_predict = False
+            self.sm_circuit = False
+            self._sm_reset("")
+
+    def _reveal_hint(self):
+        """Show the next hint for the open level (one at a time)."""
+        level_id = self.selected_level
+        status = self.level_status.get(level_id)
+        if not status or not status["unlocked"]:
+            return
+
+        total = len(self.LEVEL_HINTS.get(level_id, []))
+        if self.hints_shown.get(level_id, 0) < total:
+            self.hints_shown[level_id] = self.hints_shown.get(level_id, 0) + 1
+            self._jump_to_hints = True
+
+    def _practise_level(self):
+        """Jump from a level page to the lab that teaches that level."""
+        topic = self.LEVEL_PRACTICE.get(self.selected_level)
+        if topic:
+            self._open_topic(topic)
 
     def _activate_selection(self):
         if not self.buttons:
@@ -482,6 +976,7 @@ class DetectiveNotebook:
 
             self.selected_level = value
             self.notes_scroll = 0
+            self.selected_index = 0
             self.page = "level"
 
         elif action_type == "reference":
@@ -489,9 +984,126 @@ class DetectiveNotebook:
             self.selected_index = 0
 
         elif action_type == "topic":
-            self.selected_level = value
-            self.page = "reference_topic"
-            self.selected_index = 0
+            self._open_topic(value)
+
+        elif action_type == "hint":
+            self._reveal_hint()
+
+        elif action_type == "practice":
+            self._practise_level()
+
+        elif action_type == "lfsr_cell":
+            self._lfsr_toggle_seed(value)
+
+        elif action_type == "lfsr_tap":
+            self._lfsr_toggle_tap(value)
+
+        elif action_type == "lfsr_clock":
+            self._lfsr_clock()
+
+        elif action_type == "lfsr_guess":
+            self._lfsr_guess(value)
+
+        elif action_type == "lfsr_reset":
+            self._lfsr_restart("Register reset to the seed.")
+
+        elif action_type == "lfsr_predict":
+            self._lfsr_toggle_predict()
+
+        elif action_type == "lfsr_notes":
+            self.lfsr_notes = not self.lfsr_notes
+            self.topic_scroll = 0
+
+        elif action_type == "sm_press":
+            self._sm_press(value)
+
+        elif action_type == "sm_pick":
+            self._sm_pick(value)
+
+        elif action_type == "sm_reset":
+            self._sm_reset("Reset: the lamp is back at RED.")
+
+        elif action_type == "sm_predict":
+            self._sm_toggle_predict()
+
+        elif action_type == "sm_circuit":
+            self._sm_toggle_circuit()
+
+        elif action_type == "sm_notes":
+            self.sm_notes = not self.sm_notes
+            self.topic_scroll = 0
+            self.sm_scroll = 0
+
+        elif action_type == "num_from":
+            self._num_set_from(value)
+
+        elif action_type == "num_to":
+            self.num_to = value
+            self.num_msg = ""
+
+        elif action_type == "num_swap":
+            self._num_swap()
+
+        elif action_type == "num_plus":
+            self._num_step(1)
+
+        elif action_type == "num_minus":
+            self._num_step(-1)
+
+        elif action_type == "num_clear":
+            self.num_text = ""
+            self.num_msg = ""
+
+        elif action_type == "num_notes":
+            self.num_notes = not self.num_notes
+            self.topic_scroll = 0
+
+        elif action_type == "bool_add":
+            self._bool_add(value)
+
+        elif action_type == "bool_prev":
+            self._bool_goto(self.bool_idx - 1)
+
+        elif action_type == "bool_next":
+            self._bool_goto(self.bool_idx + 1)
+
+        elif action_type == "bool_reset":
+            self._bool_reset()
+
+        elif action_type == "bool_mode":
+            self._bool_toggle_mode()
+
+        elif action_type == "bool_vars":
+            self._bool_set_vars(value)
+
+        elif action_type == "bool_notes":
+            self.bool_notes = not self.bool_notes
+            self.topic_scroll = 0
+
+        elif action_type == "km_cell":
+            self._km_cell(value)
+
+        elif action_type == "km_mode":
+            self._km_toggle_mode()
+
+        elif action_type == "km_clear":
+            self._km_clear()
+
+        elif action_type == "km_example":
+            self._km_load_example(self.km_ex + 1)
+
+        elif action_type == "km_save":
+            self._km_save()
+
+        elif action_type == "km_check":
+            self._km_check()
+
+        elif action_type == "km_undo":
+            self._km_undo()
+
+        elif action_type == "km_notes":
+            self.km_notes = not self.km_notes
+            self.topic_scroll = 0
 
         elif action_type == "back":
             self._go_back()
@@ -578,8 +1190,6 @@ class DetectiveNotebook:
         shade.fill((0, 0, 0, 175))
         screen.blit(shade, (0, 0))
 
-        # Make the notebook fill more of the screen.
-        # Original notebook size — restore this
         page_w = min(int(width * 0.76), 760)
         page_h = min(int(height * 0.86), 850)
 
@@ -659,7 +1269,6 @@ class DetectiveNotebook:
     # INDEX PAGE
     # --------------------------------------------------------
 
-    
     def _draw_index(self, screen, content):
         self.buttons = []
 
@@ -723,10 +1332,15 @@ class DetectiveNotebook:
             button_h,
         )
 
+        # New players are pointed to the lab and glossary first.
+        any_solved = any(s["solved"] for s in self.level_status.values())
+        test_label = ("TEST THE LOGIC" if any_solved
+                      else "TEST THE LOGIC  [START HERE]")
+
         self._draw_button(
             screen,
             reference_rect,
-            "TEST THE LOGIC",
+            test_label,
             len(self.buttons) == self.selected_index,
         )
 
@@ -752,12 +1366,12 @@ class DetectiveNotebook:
 
         self._draw_back_button(screen)
 
-
     # --------------------------------------------------------
     # LEVEL NOTES
     # --------------------------------------------------------
 
     def _draw_level_page(self, screen, content):
+        self.buttons = []        # no stale index buttons on this page
         level_id = self.selected_level
 
         if level_id not in self.level_status:
@@ -784,7 +1398,8 @@ class DetectiveNotebook:
         )
 
         top_y = content.y + 70
-        max_y = self.back_button.y - 14
+        action_y = self.back_button.y - 34
+        max_y = action_y - 8
         text_area = pygame.Rect(
             content.x + 3, top_y, content.width - 12, max(0, max_y - top_y)
         )
@@ -797,11 +1412,26 @@ class DetectiveNotebook:
             self._draw_back_button(screen)
             return
 
-        # Both sections are authored in code. Scientist notes appear as soon
-        # as the level is unlocked. Detective findings appear only after solve.
+        # Sections: your job, scientist notes, hints, detective findings.
+        # Hints appear one at a time. Findings appear only after the solve.
         entries = []
+
+        goal = self.LEVEL_GOALS.get(level_id)
+        if goal:
+            entries.append(("YOUR JOB", TEAL, True))
+            entries.append((goal, INK, False))
+
         entries.append(("SCIENTIST'S NOTES", DARK_GREEN, True))
         entries.extend((line, INK, False) for line in self.SCIENTIST_NOTES.get(level_id, []))
+
+        hints = self.LEVEL_HINTS.get(level_id, [])
+        shown = self.hints_shown.get(level_id, 0)
+        entries.append(("HINTS", TEAL, True))
+        if shown == 0:
+            entries.append(("Stuck? Press H to reveal a hint. They come one at a time, gentle first.",
+                            MUTED, False))
+        for i in range(min(shown, len(hints))):
+            entries.append((f"Hint {i + 1}: {hints[i]}", TEAL, False))
 
         if status["solved"]:
             entries.append(("DETECTIVE'S FINDINGS", MAROON, True))
@@ -812,7 +1442,10 @@ class DetectiveNotebook:
             entries.append(("Findings will be recorded after this level is solved.", MUTED, False))
 
         rendered_lines = []
+        hint_start = 0
         for text, color, is_heading in entries:
+            if is_heading and text == "HINTS":
+                hint_start = len(rendered_lines)
             font = self.body_font if is_heading else self.notes_font
             wrapped = self._wrap_text(str(text), text_area.width - 12, font)
             for line in wrapped:
@@ -821,6 +1454,9 @@ class DetectiveNotebook:
 
         line_gap = 25
         max_scroll = max(0, len(rendered_lines) - max(1, text_area.height // line_gap))
+        if self._jump_to_hints:
+            self.notes_scroll = hint_start
+            self._jump_to_hints = False
         self.notes_scroll = min(self.notes_scroll, max_scroll)
         visible_lines = rendered_lines[self.notes_scroll:]
 
@@ -839,13 +1475,25 @@ class DetectiveNotebook:
             hint_surface = self._fit_text(hint, text_area.width, 13, MUTED)
             screen.blit(hint_surface, (text_area.x + 5, max_y - 3))
 
+        # Action buttons: reveal a hint, or jump to the practice lab.
+        more = shown < len(hints)
+        hint_label = f"HINT [H] {shown}/{len(hints)}" if more else "NO MORE HINTS"
+        hint_rect = pygame.Rect(content.x + 3, action_y, 230, 26)
+        self._draw_button(screen, hint_rect, hint_label,
+                          len(self.buttons) == self.selected_index,
+                          enabled=more)
+        self.buttons.append((hint_rect, ("hint", level_id)))
+
+        practise_rect = pygame.Rect(hint_rect.right + 8, action_y, 210, 26)
+        self._draw_button(screen, practise_rect, "PRACTISE [P]", False)
+        self.buttons.append((practise_rect, ("practice", level_id)))
+
         self._draw_back_button(screen)
 
     # --------------------------------------------------------
     # FIELD REFERENCE
     # --------------------------------------------------------
 
-    
     def _draw_reference_index(self, screen, content):
         self.buttons = []
 
@@ -875,7 +1523,6 @@ class DetectiveNotebook:
             y += button_h + gap
 
         self._draw_back_button(screen)
-
 
     def _gate_output(self, gate, a, b):
         if gate == "AND":
@@ -1155,12 +1802,31 @@ class DetectiveNotebook:
                    content.x+3, circuit_rect.bottom+2, MUTED, self.small_font)
         self._draw_back_button(screen)
 
-
     def _draw_reference_topic(self, screen, content):
         if self.selected_level == "LOGIC GATES":
-           self._draw_logic_gates_page(screen, content)
-           return
+            self._draw_logic_gates_page(screen, content)
+            return
         topic = self.selected_level
+
+        if topic == "REGISTERS AND LFSRs" and not self.lfsr_notes:
+            self._draw_lfsr_page(screen, content)
+            return
+
+        if topic == "NUMBER SYSTEMS" and not self.num_notes:
+            self._draw_numbers_page(screen, content)
+            return
+
+        if topic == "STATE MACHINES" and not self.sm_notes:
+            self._draw_sm_lab(screen, content)
+            return
+
+        if topic == "BOOLEAN ALGEBRA" and not self.bool_notes:
+            self._draw_bool_lab(screen, content)
+            return
+
+        if topic == "KARNAUGH MAPS" and not self.km_notes:
+            self._draw_kmap_lab(screen, content)
+            return
 
         title = self._fit_text(topic, content.width, 20, INK)
         screen.blit(title, (content.x + 3, content.y + 2))
@@ -1173,29 +1839,2122 @@ class DetectiveNotebook:
             2,
         )
 
-        y = content.y + 49
+        self.buttons = []
+        text_top = content.y + 49
         line_gap = 22
         max_y = self.back_button.y - 10
 
+        # Build every wrapped line first so long notes can be scrolled.
+        rows = []
         for note in self.reference_notes.get(topic, []):
+            is_head = note.isupper() and not note.startswith(("-", " "))
+            lead = note[:len(note) - len(note.lstrip(" "))]
             wrapped = self._wrap_text(
                 note, content.width - 10, self.small_font
             )
+            for index, line in enumerate(wrapped):
+                last = index == len(wrapped) - 1
+                rows.append((
+                    lead + line,
+                    DARK_GREEN if is_head else INK,
+                    4 if last else 0,
+                ))
 
-            for line in wrapped:
-                if y + line_gap > max_y:
-                    break
-
-                self._text(
-                    screen, line,
-                    content.x + 5, y, INK, self.small_font,
-                )
-                y += line_gap
-
-            y += 4
-
-            if y >= max_y:
+        visible_h = max_y - text_top
+        max_scroll = 0
+        while max_scroll < len(rows) - 1:
+            needed = sum(line_gap + extra for _l, _c, extra in rows[max_scroll:])
+            if needed <= visible_h + 4:
                 break
+            max_scroll += 1
+
+        self.topic_scroll = max(0, min(self.topic_scroll, max_scroll))
+
+        y = text_top
+        for line, color, extra in rows[self.topic_scroll:]:
+            if y + line_gap > max_y:
+                break
+            self._text(screen, line, content.x + 5, y, color, self.small_font)
+            y += line_gap + extra
+
+        if max_scroll > 0:
+            hint = self.tiny_font.render(
+                "UP / DOWN OR WHEEL: SCROLL", False, MUTED
+            )
+            screen.blit(hint, (self.back_button.right + 14,
+                               self.back_button.y + 8))
+
+        lab_actions = {
+            "REGISTERS AND LFSRs": "lfsr_notes",
+            "NUMBER SYSTEMS": "num_notes",
+            "STATE MACHINES": "sm_notes",
+            "BOOLEAN ALGEBRA": "bool_notes",
+            "KARNAUGH MAPS": "km_notes",
+        }
+        if topic in lab_actions:
+            lab_rect = pygame.Rect(content.right - 190, self.back_button.y,
+                                   190, self.back_button.height)
+            self._draw_button(screen, lab_rect, "OPEN LAB [T]", True)
+            self.buttons.append((lab_rect, (lab_actions[topic], None)))
+
+        self._draw_back_button(screen)
+
+    # --------------------------------------------------------
+    # STATE MACHINES LAB
+    # --------------------------------------------------------
+    # One tiny machine, shown three ways at once and always in sync:
+    #   - the lamp / state diagram (circles and arrows)
+    #   - the rule table (row = where you are, column = button you press)
+    #   - the circuit (memory boxes + AND guards, like Level 3's build step)
+    #
+    # EXPLORE  press A, B or C freely and read the explanation.
+    # PREDICT  the lab names a state and a button; click the lamp that comes
+    #          next. 5 correct in a row passes.
+    #
+    # Layout: the diagram/circuit and the control buttons are fixed at the
+    # top. Everything below them (explanation, rule table, goal, history)
+    # lives in a clipped area that scrolls with UP/DOWN or the mouse wheel.
+
+    def _on_sm_page(self):
+        return (self.page == "reference_topic"
+                and self.selected_level == "STATE MACHINES")
+
+    def _sm_scroll_by(self, amount):
+        self.sm_scroll = max(0, min(self.sm_scroll + amount,
+                                    self.sm_max_scroll))
+
+    def _sm_next(self, state, btn):
+        """Returns (next_state, fired_step_index or None).
+
+        A step fires when the ball is in the step's start state AND the
+        button matches. RED is the always-ready start, so pressing A always
+        starts a fresh ball at AMBER. With no step firing the ball vanishes
+        and the machine is back at RED.
+        """
+        for index, (frm, need, to) in enumerate(self.SM_STEPS):
+            if btn == need and (state == frm or frm == "RED"):
+                return to, index
+        return "RED", None
+
+    def _sm_reset(self, message=""):
+        self.sm_state = "RED"
+        self.sm_last = None            # (from, button, to, step index)
+        self.sm_presses = 0
+        self.sm_seq = []
+        self.sm_press_time = -10000
+        self.sm_flash_btn = None
+        self.sm_msg = message
+        self.sm_msg_ok = True
+        self.sm_scroll = 0
+
+    def _sm_apply(self, btn):
+        frm = self.sm_state
+        to, step = self._sm_next(frm, btn)
+        self.sm_state = to
+        self.sm_last = (frm, btn, to, step)
+        self.sm_presses += 1
+        self.sm_seq.append(btn)
+        self.sm_seq = self.sm_seq[-16:]
+        self.sm_press_time = pygame.time.get_ticks()
+        self.sm_flash_btn = btn
+        self.sm_scroll = 0             # show the new explanation
+        return frm, to, step
+
+    def _sm_explain(self, frm, btn, to, step):
+        if step is None:
+            if frm == "RED":
+                text = (f"RED + {btn} is not a forward step, so nothing "
+                        "happens. You are still in RED. Start with A.")
+            else:
+                text = (f"{frm} + {btn} is not a forward step, so the "
+                        "machine drops back to RED. A wrong button costs "
+                        "you your progress.")
+        elif step == 0 and frm != "RED":
+            text = ("You pressed A. A always starts a fresh ball at the "
+                    "beginning, so the lamp goes to AMBER.")
+        else:
+            text = f"{frm} + {btn} = {to}. The lamp moves to {to}."
+        if to == "GREEN":
+            text += " GREEN! The secret code is A, B, C."
+
+        if self.sm_circuit:
+            if step is not None:
+                src = self.SM_STEPS[step][0]
+                text += (f" In the circuit, the STEP {step + 1} guard saw "
+                         f"the ball at {src} AND button {btn}. Both were "
+                         f"ON, so the {to} box now remembers the ball.")
+            else:
+                text += (" In the circuit, every guard said NO, so no box "
+                         "remembers the ball.")
+        return text
+
+    def _sm_press(self, btn):
+        if self.sm_predict:
+            self.sm_msg = ("PREDICT mode: click the lamp you think comes "
+                           "next (or press 1-4).")
+            self.sm_msg_ok = False
+            self.sm_scroll = 0
+            return
+        frm, to, step = self._sm_apply(btn)
+        self.sm_msg = self._sm_explain(frm, btn, to, step)
+        self.sm_msg_ok = step is not None
+
+    def _sm_new_question(self):
+        """Pick a random (state, button) pair, different from the last one."""
+        old = (self.sm_q_state, self.sm_q_btn)
+        while True:
+            pair = (random.choice(self.SM_STATES),
+                    random.choice(self.SM_BUTTONS))
+            if pair != old:
+                break
+        self.sm_q_state, self.sm_q_btn = pair
+        # Show the asked state on the diagram; no arrows from earlier moves.
+        self.sm_state = self.sm_q_state
+        self.sm_last = None
+
+    def _sm_toggle_predict(self):
+        self.sm_predict = not self.sm_predict
+        self.sm_scroll = 0
+        if self.sm_predict:
+            self.sm_circuit = False
+            self._sm_new_question()
+            self.sm_msg = ("PREDICT: read the rule table, then click the "
+                           "lamp that comes next.")
+            self.sm_msg_ok = True
+        else:
+            self._sm_reset("Predict mode off. Press A, B or C to explore.")
+
+    def _sm_toggle_circuit(self):
+        self.sm_circuit = not self.sm_circuit
+        self.sm_scroll = 0
+        if self.sm_circuit:
+            if self.sm_predict:
+                self.sm_predict = False
+                self._sm_reset("")
+            self.sm_msg = ("Same machine, built from memory boxes and "
+                           "guards. A glowing box holds the ball.")
+        else:
+            self.sm_msg = "Back to the lamp diagram."
+        self.sm_msg_ok = True
+
+    def _sm_pick(self, name):
+        if not self.sm_predict:
+            return
+        btn = self.sm_q_btn
+        frm = self.sm_q_state
+        to, _step = self._sm_next(frm, btn)
+        self.sm_scroll = 0
+        if name == to:
+            self.sm_msg = f"CORRECT! {frm} + {btn} = {to}."
+            self.sm_msg_ok = True
+            self._sm_new_question()
+        else:
+            self.sm_msg = (f"NOT QUITE. Row {frm}, column {btn} of the table "
+                           f"says {to}, not {name}. Try again.")
+            self.sm_msg_ok = False
+
+    def _sm_handle_key(self, event):
+        """STATE MACHINES keys. Returns True when the key was used."""
+        key = event.key
+        if key == pygame.K_t:
+            self.sm_notes = not self.sm_notes
+            self.topic_scroll = 0
+            self.sm_scroll = 0
+            return True
+        if self.sm_notes:
+            return False
+
+        # Scrolling the lab's lower area.
+        if key in (pygame.K_UP, pygame.K_w):
+            self._sm_scroll_by(-self.SM_SCROLL_STEP)
+            return True
+        if key in (pygame.K_DOWN, pygame.K_s):
+            self._sm_scroll_by(self.SM_SCROLL_STEP)
+            return True
+        if key == pygame.K_PAGEUP:
+            self._sm_scroll_by(-self.SM_SCROLL_STEP * 4)
+            return True
+        if key == pygame.K_PAGEDOWN:
+            self._sm_scroll_by(self.SM_SCROLL_STEP * 4)
+            return True
+
+        letters = {pygame.K_a: "A", pygame.K_b: "B", pygame.K_c: "C"}
+        if key in letters:
+            self._sm_press(letters[key])
+            return True
+
+        digits = (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4)
+        if key in digits:
+            self._sm_pick(self.SM_STATES[digits.index(key)])
+            return True
+        if key == pygame.K_r:
+            self._sm_reset("Reset: the lamp is back at RED.")
+            return True
+        if key == pygame.K_p:
+            self._sm_toggle_predict()
+            return True
+        if key == pygame.K_v:
+            self._sm_toggle_circuit()
+            return True
+        if key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_d,
+                   pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
+            return True
+        return False                         # ESC / BACKSPACE go back
+
+    # ---- small drawing helpers ------------------------------------
+
+    @staticmethod
+    def _arrow_head(screen, colour, p_from, p_to, size=10):
+        dx, dy = p_to[0] - p_from[0], p_to[1] - p_from[1]
+        d = math.hypot(dx, dy) or 1
+        ux, uy = dx / d, dy / d
+        left = (p_to[0] - ux * size - uy * size * 0.5,
+                p_to[1] - uy * size + ux * size * 0.5)
+        right = (p_to[0] - ux * size + uy * size * 0.5,
+                 p_to[1] - uy * size - ux * size * 0.5)
+        pygame.draw.polygon(screen, colour, [p_to, left, right])
+
+    @staticmethod
+    def _bezier(p0, p1, p2, steps=24):
+        pts = []
+        for i in range(steps + 1):
+            t = i / steps
+            a, b, c = (1 - t) ** 2, 2 * (1 - t) * t, t * t
+            pts.append((a * p0[0] + b * p1[0] + c * p2[0],
+                        a * p0[1] + b * p1[1] + c * p2[1]))
+        return pts
+
+    @staticmethod
+    def _glow_rect(screen, rect, colour, strength=1.0):
+        """Soft glowing outline around rect; the part underneath stays visible."""
+        pad = 30
+        surf = pygame.Surface((rect.w + pad * 2, rect.h + pad * 2),
+                              pygame.SRCALPHA)
+        for i in range(5, 0, -1):
+            grow = i * 4
+            alpha = int(min(255, (25 + (6 - i) * 25) * strength))
+            ring = pygame.Rect(pad - grow, pad - grow,
+                               rect.w + grow * 2, rect.h + grow * 2)
+            pygame.draw.rect(surf, (*colour, alpha), ring, 4,
+                             border_radius=6 + grow)
+        screen.blit(surf, (rect.x - pad, rect.y - pad))
+
+    # ---- diagram view ----------------------------------------------
+
+    def _sm_draw_diagram(self, screen, pnl):
+        state = self.sm_state
+        last = self.sm_last
+        r = 28
+        y = pnl.y + 62
+        xs = [pnl.x + int(pnl.width * (2 * i + 1) / 8) for i in range(4)]
+        pos = {name: (xs[i], y) for i, name in enumerate(self.SM_STATES)}
+        idx = {name: i for i, name in enumerate(self.SM_STATES)}
+        base = (95, 110, 122)
+
+        # Which forward arrow (if any) did the last press walk along?
+        last_forward = None
+        if last and last[3] is not None and last[0] == self.SM_STEPS[last[3]][0]:
+            last_forward = last[3]
+
+        # forward arrows (the correct path)
+        for k, (frm, btn, to) in enumerate(self.SM_STEPS):
+            x0, x1 = pos[frm][0], pos[to][0]
+            a, b = (x0 + r + 4, y), (x1 - r - 4, y)
+            on = last_forward == k
+            colour = DARK_GREEN if on else base
+            pygame.draw.line(screen, colour, a, b, 4 if on else 3)
+            self._arrow_head(screen, colour, a, b)
+            lab = self.small_font.render(btn, False, colour)
+            screen.blit(lab, lab.get_rect(midbottom=((x0 + x1) // 2, y - 6)))
+
+        # the last press when it was NOT a plain forward step
+        if last and last_forward is None:
+            frm, btn, to, step = last
+            colour = DARK_GREEN if step is not None else MAROON
+            x0, x1 = pos[frm][0], pos[to][0]
+            if frm == to:
+                cx, cy = x0, y - r - 10
+                pygame.draw.circle(screen, colour, (cx, cy), 12, 3)
+                lab = self.small_font.render(btn, False, colour)
+                screen.blit(lab, (cx + 15, cy - 20))
+            else:
+                span = abs(idx[frm] - idx[to])
+                s = 1 if x1 > x0 else -1
+                p0 = (x0 + s * 8, y + r)
+                p2 = (x1 - s * 8, y + r)
+                p1 = ((x0 + x1) // 2, y + r + 28 + span * 20)
+                pts = self._bezier(p0, p1, p2)
+                pygame.draw.lines(screen, colour, False, pts, 4)
+                self._arrow_head(screen, colour, pts[-2], pts[-1])
+                mx, my = pts[len(pts) // 2]
+                lab = self.small_font.render(btn, False, colour)
+                screen.blit(lab, (int(mx) - 5, int(my) + 4))
+
+        # state circles
+        for name, (x, cy) in pos.items():
+            colour = self.SM_COLOURS[name]
+            pygame.draw.circle(screen, colour, (x, cy), r)
+            pygame.draw.circle(screen, INK, (x, cy), r, 3)
+            if name == state:
+                pygame.draw.circle(screen, CYAN, (x, cy), r + 6, 3)
+            lab = self.tiny_font.render(name, False, WHITE)
+            screen.blit(lab, lab.get_rect(center=(x, cy)))
+            if self.sm_predict:
+                num = self.small_font.render(
+                    str(self.SM_STATES.index(name) + 1), False, INK)
+                screen.blit(num, (x - r - 8, cy - r - 12))
+                rect = pygame.Rect(x - r, cy - r, r * 2, r * 2)
+                self.buttons.append((rect, ("sm_pick", name)))
+
+        now = self.tiny_font.render(f"NOW: {state}", False, INK)
+        screen.blit(now, (pnl.x + 8, pnl.y + 6))
+
+    # ---- circuit view ----------------------------------------------
+
+    def _sm_draw_circuit(self, screen, pnl):
+        wire = (55, 125, 151)
+        dark = (7, 27, 39)
+        lit_green = (40, 205, 130)
+        state = self.sm_state
+        last = self.sm_last
+        now = pygame.time.get_ticks()
+        recent = now - self.sm_press_time < 700
+
+        GW, GH, FW, FH, gap = 56, 44, 50, 50, 26
+        gy = pnl.y + 32
+        stride = (pnl.width - 140 - 20) // 3
+
+        # RED: the always-ready start
+        red = pygame.Rect(pnl.x + 14, gy + 15, 84, 30)
+        red_on = state == "RED"
+        pygame.draw.rect(screen, self.SM_COLOURS["RED"] if red_on else dark, red)
+        pygame.draw.rect(screen, self.SM_COLOURS["RED"], red, 3)
+        lab = self.small_font.render("RED = 1", False, WHITE)
+        screen.blit(lab, lab.get_rect(center=red.center))
+        cap = self.tiny_font.render("ALWAYS READY", False, MUTED)
+        screen.blit(cap, cap.get_rect(midtop=(red.centerx, red.bottom + 3)))
+        if red_on:
+            self._glow_rect(screen, red, self.SM_COLOURS["RED"], 0.9)
+
+        prev_out = None                         # right edge of previous box
+        for k, (frm, btn, to) in enumerate(self.SM_STEPS):
+            gx = pnl.x + 140 + k * stride
+            gate = pygame.Rect(gx, gy, GW, GH)
+            ff = pygame.Rect(gx + GW + gap, gy - 3, FW, FH)
+            upper = gy + GH // 3
+            lower = gy + (2 * GH) // 3
+            fired = last is not None and last[3] == k
+
+            # upper input: where the ball is
+            if k == 0:
+                pts = [(red.right, red.centery),
+                       (red.right + 10, red.centery),
+                       (red.right + 10, upper), (gx, upper)]
+            else:
+                px, py = prev_out
+                pts = [(px, py), (px + 12, py), (px + 12, upper), (gx, upper)]
+            pygame.draw.lines(screen, wire, False, pts, 3)
+
+            # lower input: the button
+            bb = pygame.Rect(gx - 44, pnl.y + 104, 38, 26)
+            pygame.draw.lines(screen, wire, False,
+                              [(bb.centerx, bb.y), (bb.centerx, lower),
+                               (gx, lower)], 3)
+
+            # gate -> memory box
+            pygame.draw.line(screen, wire, (gx + GW, gy + GH // 2),
+                             (ff.x, ff.centery), 3)
+            self._draw_gate_symbol(screen, "AND", gate,
+                                   lit_green if fired else CYAN)
+            cap = self.tiny_font.render(f"STEP {k + 1}", False, INK)
+            screen.blit(cap, cap.get_rect(midtop=(gate.centerx, gate.bottom + 4)))
+
+            # memory box
+            holds = state == to
+            pygame.draw.rect(screen, self.SM_COLOURS[to] if holds else dark, ff)
+            pygame.draw.rect(screen, CYAN, ff, 3)
+            q = self.title_font.render("1" if holds else "0", False, WHITE)
+            screen.blit(q, q.get_rect(center=ff.center))
+            name = self.tiny_font.render(to, False, INK)
+            screen.blit(name, name.get_rect(midbottom=(ff.centerx, ff.y - 3)))
+            if holds:
+                self._glow_rect(screen, ff, self.SM_COLOURS[to],
+                                0.75 + 0.25 * math.sin(now / 180))
+
+            # button box
+            flash = recent and self.sm_flash_btn == btn
+            pygame.draw.rect(screen, dark, bb)
+            pygame.draw.rect(screen, lit_green if flash else CYAN, bb,
+                             4 if flash else 3)
+            bl = self.small_font.render(btn, False, WHITE)
+            screen.blit(bl, bl.get_rect(center=bb.center))
+            if flash:
+                self._glow_rect(screen, bb, lit_green, 0.8)
+            if not self.sm_predict:
+                self.buttons.append((bb, ("sm_press", btn)))
+
+            prev_out = (ff.right, ff.centery)
+
+        note = self.tiny_font.render("EACH PRESS = ONE CLOCK TICK", False, MUTED)
+        screen.blit(note, note.get_rect(bottomright=(pnl.right - 8, pnl.bottom - 6)))
+
+    # ---- rule table / equations (each returns its bottom y) -------
+
+    def _sm_draw_table(self, screen, x, y):
+        col_w = [112, 86, 86, 86]
+        row_h = 22
+        heads = ["NOW IN", "+ A", "+ B", "+ C"]
+
+        title = self.tiny_font.render(
+            "RULE TABLE: row = where you are, column = button", False, MUTED)
+        screen.blit(title, (x, y))
+        y += 20
+
+        cx = x
+        for col, head in enumerate(heads):
+            cell = pygame.Rect(cx, y, col_w[col], row_h)
+            pygame.draw.rect(screen, PAPER_LIGHT, cell)
+            pygame.draw.rect(screen, PAGE_LINE, cell, 2)
+            surf = self.tiny_font.render(head, False, INK)
+            screen.blit(surf, surf.get_rect(center=cell.center))
+            cx += col_w[col]
+
+        for r, state in enumerate(self.SM_STATES):
+            ry = y + (r + 1) * row_h
+            name_cell = pygame.Rect(x, ry, col_w[0], row_h)
+            pygame.draw.rect(screen, self.SM_COLOURS[state], name_cell)
+            pygame.draw.rect(screen, PAGE_LINE, name_cell, 2)
+            surf = self.tiny_font.render(state, False, WHITE)
+            screen.blit(surf, surf.get_rect(center=name_cell.center))
+            cx = x + col_w[0]
+            for c, btn in enumerate(self.SM_BUTTONS):
+                to, _step = self._sm_next(state, btn)
+                cell = pygame.Rect(cx, ry, col_w[c + 1], row_h)
+                fired = (self.sm_last is not None
+                         and (self.sm_last[0], self.sm_last[1]) == (state, btn))
+                asked = (self.sm_predict
+                         and (state, btn) == (self.sm_q_state, self.sm_q_btn))
+                if asked:
+                    pygame.draw.rect(screen, (185, 224, 226), cell)
+                    pygame.draw.rect(screen, CYAN, cell, 3)
+                elif fired:
+                    pygame.draw.rect(screen, (190, 228, 205), cell)
+                    pygame.draw.rect(screen, DARK_GREEN, cell, 3)
+                else:
+                    pygame.draw.rect(screen, PAPER, cell)
+                    pygame.draw.rect(screen, PAGE_LINE, cell, 1)
+                surf = self.tiny_font.render(to, False, INK)
+                screen.blit(surf, surf.get_rect(center=cell.center))
+                cx += col_w[c + 1]
+
+        return y + (len(self.SM_STATES) + 1) * row_h
+
+    def _sm_draw_equations(self, screen, x, y, width):
+        title = self.tiny_font.render(
+            "WHAT EACH GUARD CHECKS", False, MUTED)
+        screen.blit(title, (x, y))
+        sub = self.tiny_font.render(
+            "(a box gets 1 only if both inputs are 1)", False, MUTED)
+        screen.blit(sub, (x, y + 15))
+        ty = y + 38
+        last = self.sm_last
+        for k, (frm, btn, to) in enumerate(self.SM_STEPS):
+            fired = last is not None and last[3] == k
+            colour = DARK_GREEN if fired else INK
+            line = f"STEP {k + 1}: {to} = {frm} AND {btn}"
+            self._text(screen, line, x, ty, colour, self.small_font)
+            ty += 24
+        ty += 4
+        for note in ("RED is always ON: it is the ball's start.",
+                     "No box holds the ball = back at RED."):
+            for line in self._wrap_text(note, width, self.tiny_font):
+                self._text(screen, line, x, ty, MUTED, self.tiny_font)
+                ty += 16
+        return ty
+
+    def _sm_draw_side(self, screen, x, y, width):
+        """Goal / question / history column. Returns its bottom y."""
+        state = self.sm_state
+        if self.sm_predict:
+            self._text(screen, "WHAT HAPPENS NEXT?", x, y, DARK_GREEN,
+                       self.small_font)
+            q = self._fit_text(f"{self.sm_q_state} + {self.sm_q_btn} = ?",
+                               width, 25, INK)
+            screen.blit(q, (x, y + 28))
+            return y + 66
+
+        self._text(screen, "GOAL: REACH GREEN", x, y, DARK_GREEN,
+                   self.small_font)
+        self._text(screen, f"PRESSES: {self.sm_presses}", x, y + 26,
+                   INK, self.small_font)
+        self._text(screen, "BUTTONS PRESSED:", x, y + 54, MUTED,
+                   self.tiny_font)
+
+        seq = " ".join(self.sm_seq) if self.sm_seq else "(none yet)"
+        yy = y + 72
+        for line in self._wrap_text(seq, width, self.small_font) or [seq]:
+            self._text(screen, line, x, yy, INK, self.small_font)
+            yy += 21
+
+        if state == "GREEN":
+            tip = "You reached GREEN! The shortest possible code is 3 presses."
+            colour = DARK_GREEN
+        else:
+            tip = "Tip: the arrows on the map show the way forward."
+            colour = MUTED
+        yy += 8
+        for line in self._wrap_text(tip, width, self.tiny_font):
+            self._text(screen, line, x, yy, colour, self.tiny_font)
+            yy += 16
+        return yy
+
+    # ---- the whole lab -------------------------------------------
+
+    def _draw_sm_lab(self, screen, content):
+        self.buttons = []
+        X, Y, W = content.x, content.y, content.width
+        state = self.sm_state
+        now = pygame.time.get_ticks()
+
+        # ---- title / tag / info -------------------------------------
+        title = self._fit_text("STATE MACHINES", W, 20, INK)
+        screen.blit(title, (X + 3, Y + 2))
+        if self.sm_predict:
+            tag = "PREDICT"
+        elif self.sm_circuit:
+            tag = "CIRCUIT VIEW"
+        else:
+            tag = "EXPLORE"
+        tag_s = self.small_font.render(tag, False,
+                                       MAROON if self.sm_predict else DARK_GREEN)
+        screen.blit(tag_s, tag_s.get_rect(topright=(content.right - 3, Y + 8)))
+        pygame.draw.line(screen, PAGE_LINE, (X + 2, Y + 35),
+                         (content.right - 2, Y + 35), 2)
+
+        if self.sm_predict:
+            info = ("PREDICT: read the table, then click the lamp that comes "
+                    "next (or press 1-4).")
+        elif self.sm_circuit:
+            info = ("The same machine as memory boxes and guards. Press A, "
+                    "B or C and watch the ball hop.")
+        else:
+            info = "Press A, B or C. The lamp moves by the rules. Goal: reach GREEN."
+        info_s = self._fit_text(info, W - 6, 16, INK)
+        screen.blit(info_s, (X + 3, Y + 41))
+
+        # ---- diagram or circuit (fixed) ----------------------------
+        pnl = pygame.Rect(X + 3, Y + 62, W - 6, 150)
+        pygame.draw.rect(screen, (198, 202, 205), pnl)
+        pygame.draw.rect(screen, PAGE_LINE, pnl, 2)
+        if self.sm_circuit:
+            self._sm_draw_circuit(screen, pnl)
+        else:
+            self._sm_draw_diagram(screen, pnl)
+
+        # ---- control buttons (fixed) -------------------------------
+        by, bh = Y + 222, 28
+        bx = X + 3
+        flash_ok = now - self.sm_press_time < 500
+        for letter in self.SM_BUTTONS:
+            rect = pygame.Rect(bx, by, 46, bh)
+            self._draw_button(screen, rect, letter, False,
+                              enabled=not self.sm_predict)
+            if flash_ok and self.sm_flash_btn == letter:
+                pygame.draw.rect(screen, DARK_GREEN, rect, 4)
+            if not self.sm_predict:
+                self.buttons.append((rect, ("sm_press", letter)))
+            bx += 52
+        bx += 6
+        for label, action, width, sel in (
+            ("RESET [R]", "sm_reset", 100, False),
+            ("PREDICT [P]", "sm_predict", 124, self.sm_predict),
+            ("CIRCUIT [V]" if not self.sm_circuit else "DIAGRAM [V]",
+             "sm_circuit", 132, self.sm_circuit),
+        ):
+            rect = pygame.Rect(bx, by, width, bh)
+            self._draw_button(screen, rect, label, sel)
+            self.buttons.append((rect, (action, None)))
+            bx += width + 8
+        notes = pygame.Rect(content.right - 104, by, 100, bh)
+        self._draw_button(screen, notes, "NOTES [T]", False)
+        self.buttons.append((notes, ("sm_notes", None)))
+
+        # ---- scrollable lower area ---------------------------------
+        area_top = by + bh + 10
+        area_bottom = self.back_button.y - 8
+        area = pygame.Rect(X, area_top, W, max(40, area_bottom - area_top))
+
+        self.sm_scroll = max(0, min(self.sm_scroll, self.sm_max_scroll))
+        origin = area.y - self.sm_scroll
+        y = origin
+
+        screen.set_clip(area)
+
+        # 1) explanation box
+        msg = self.sm_msg
+        if not msg:
+            if self.sm_predict:
+                msg = "Look at the question below, then click a lamp."
+            else:
+                msg = (f"You are in {state}. "
+                       + ("Press A to start the sequence." if state == "RED"
+                          else "Press a button to see what happens."))
+        colour = DARK_GREEN if self.sm_msg_ok else MAROON
+        msg_lines = self._wrap_text(msg, W - 30, self.small_font) or [""]
+        line_h = 21
+        box_h = len(msg_lines) * line_h + 16
+        box = pygame.Rect(X + 3, y + 2, W - 12, box_h)
+        pygame.draw.rect(screen, PAPER_LIGHT, box)
+        pygame.draw.rect(screen, colour, box, 2)
+        ty = box.y + 8
+        for line in msg_lines:
+            self._text(screen, line, box.x + 8, ty, colour, self.small_font)
+            ty += line_h
+        y = box.bottom + 14
+
+        # 2) two columns: table / equations on the left, status on the right
+        left_w = 370
+        left_x = X + 3
+        right_x = X + left_w + 24
+        right_w = max(120, content.right - right_x - 14)
+
+        if self.sm_circuit:
+            left_bottom = self._sm_draw_equations(screen, left_x, y, left_w)
+        else:
+            left_bottom = self._sm_draw_table(screen, left_x, y)
+        right_bottom = self._sm_draw_side(screen, right_x, y, right_w)
+
+        bottom = max(left_bottom, right_bottom) + 6
+        screen.set_clip(None)
+
+        # ---- measure + scrollbar -----------------------------------
+        total = bottom - origin
+        self.sm_max_scroll = max(0, total - area.height)
+
+        if self.sm_max_scroll > 0:
+            track = pygame.Rect(area.right - 6, area.y, 4, area.height)
+            pygame.draw.rect(screen, PAGE_LINE, track)
+            thumb_h = max(20, int(area.height * area.height / total))
+            span = area.height - thumb_h
+            thumb_y = area.y + int(span * self.sm_scroll / self.sm_max_scroll)
+            pygame.draw.rect(screen, INK, (track.x, thumb_y, 4, thumb_h))
+
+            hint = self.tiny_font.render(
+                "UP / DOWN OR WHEEL: SCROLL", False, MUTED)
+            screen.blit(hint, (self.back_button.right + 14,
+                               self.back_button.y + 8))
+
+        self._draw_back_button(screen, "BACK [ESC]")
+
+    # --------------------------------------------------------
+    # INTERACTIVE LFSR LAB
+    # --------------------------------------------------------
+
+    def _on_lfsr_page(self):
+        return (self.page == "reference_topic"
+                and self.selected_level == "REGISTERS AND LFSRs")
+
+    def _lfsr_feedback(self, state):
+        """XOR of the tapped cells (1 if an odd number of them are 1)."""
+        fb = 0
+        for tap in self.lfsr_taps:
+            fb ^= state[tap]
+        return fb
+
+    def _lfsr_say(self, text, ok=True):
+        self.lfsr_msg = text
+        self.lfsr_msg_ok = ok
+
+    def _lfsr_restart(self, message=""):
+        self.lfsr_hist = [list(self.lfsr_seed)]
+        self.lfsr_out = []
+        self.lfsr_count = 0
+        self._lfsr_say(message)
+
+    def _lfsr_clock(self):
+        state = self.lfsr_hist[-1]
+        out = state[-1]
+        new_state = [self._lfsr_feedback(state)] + state[:-1]
+        self.lfsr_hist.append(new_state)
+        self.lfsr_out.append(out)
+        self.lfsr_count += 1
+        # Keep memory small; the diagram only shows the last 16 states.
+        self.lfsr_hist = self.lfsr_hist[-40:]
+        self.lfsr_out = self.lfsr_out[-60:]
+
+    def _lfsr_toggle_seed(self, index):
+        self.lfsr_seed[index] ^= 1
+        self._lfsr_restart("Seed changed, register restarted: "
+                           + "".join(map(str, self.lfsr_seed)))
+
+    def _lfsr_toggle_tap(self, index):
+        if index in self.lfsr_taps:
+            self.lfsr_taps.remove(index)
+        else:
+            self.lfsr_taps.add(index)
+        picked = ", ".join(str(t + 1) for t in sorted(self.lfsr_taps)) or "none"
+        self._lfsr_restart(f"Taps changed, register restarted. Taps: {picked}")
+
+    def _lfsr_toggle_predict(self):
+        self.lfsr_predict = not self.lfsr_predict
+        self.lfsr_streak = 0
+        if self.lfsr_predict:
+            self._lfsr_say("Predict mode: get 5 right in a row to pass.")
+        else:
+            self._lfsr_say("Predict mode off. Press CLOCK to step.")
+
+    def _lfsr_guess(self, bit):
+        if not self.lfsr_predict:
+            return
+        if not self.lfsr_taps:
+            self._lfsr_say("Select at least one TAP first.", ok=False)
+            return
+        actual = self._lfsr_feedback(self.lfsr_hist[-1])
+        if bit == actual:
+            self.lfsr_streak += 1
+            self._lfsr_clock()
+            if self.lfsr_streak >= 5:
+                self.lfsr_passed = True
+                self._lfsr_say("CHALLENGE PASSED! You can predict an LFSR step.")
+            else:
+                self._lfsr_say(f"CORRECT! Streak {self.lfsr_streak}/5.")
+        else:
+            self.lfsr_streak = 0
+            self._lfsr_say("NOT QUITE. XOR is 1 only when the inputs differ "
+                           "(an odd number of 1s). Streak reset.", ok=False)
+
+    def _lfsr_handle_key(self, event):
+        """LFSR-page keys. Returns True when the key was used."""
+        key = event.key
+        if key == pygame.K_t:
+            self.lfsr_notes = not self.lfsr_notes
+            self.topic_scroll = 0
+            return True
+        if self.lfsr_notes:
+            return False
+
+        if key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_KP_ENTER):
+            if self.lfsr_predict:
+                self._lfsr_say("Predict mode: press LEFT for 0 or RIGHT for 1.",
+                               ok=False)
+            else:
+                self._lfsr_clock()
+                self._lfsr_say("")
+            return True
+        if key == pygame.K_r:
+            self._lfsr_restart("Register reset to the seed.")
+            return True
+        if key == pygame.K_p:
+            self._lfsr_toggle_predict()
+            return True
+        if key == pygame.K_LEFT:
+            self._lfsr_guess(0)
+            return True
+        if key == pygame.K_RIGHT:
+            self._lfsr_guess(1)
+            return True
+        digits = (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5)
+        if key in digits:
+            index = digits.index(key)
+            if event.mod & pygame.KMOD_SHIFT:
+                self._lfsr_toggle_seed(index)
+            else:
+                self._lfsr_toggle_tap(index)
+            return True
+        return False
+
+    def _lfsr_taps_expr(self, state):
+        parts = [f"CELL {t + 1} ({state[t]})" for t in sorted(self.lfsr_taps)]
+        return " XOR ".join(parts)
+
+    def _lfsr_explanation(self):
+        state = self.lfsr_hist[-1]
+        taps = sorted(self.lfsr_taps)
+
+        if self.lfsr_predict:
+            if not taps:
+                return ("PREDICT: no taps selected. Pick a TAP, then guess "
+                        "the bit that enters CELL 1.")
+            bits = " and ".join(str(state[t]) for t in taps)
+            return (f"PREDICT: the tapped cells hold {bits}. What bit will "
+                    f"the XOR send into CELL 1?  [LEFT] = 0   [RIGHT] = 1")
+
+        if len(self.lfsr_hist) == 1:
+            seed = "".join(map(str, state))
+            if not taps:
+                return (f"READY: seed is {seed}. No taps are selected, so "
+                        f"the feedback bit will be 0.")
+            fb = self._lfsr_feedback(state)
+            return (f"READY: seed is {seed}. On the next CLOCK, "
+                    f"{self._lfsr_taps_expr(state)} = {fb} will enter CELL 1.")
+
+        prev = self.lfsr_hist[-2]
+        fb = state[0]
+        left = prev[-1]
+        calc = (f"{self._lfsr_taps_expr(prev)} = {fb}" if taps
+                else "No taps, so feedback = 0")
+        return (f"CLOCK {self.lfsr_count}: {calc}. Every bit moved right: "
+                f"{fb} entered CELL 1 and the old CELL 5 bit ({left}) left "
+                f"as OUTPUT.")
+
+    def _lfsr_note(self):
+        state = self.lfsr_hist[-1]
+        if not any(state):
+            return "All cells are 0: XOR of zeros is always 0, so it is stuck."
+        if self.lfsr_count > 0 and state == self.lfsr_seed:
+            return (f"Back at the seed after {self.lfsr_count} clocks: "
+                    f"the pattern repeats!")
+        return ""
+
+    def _lfsr_wave(self, screen, x0, row_y, row_h, step_w, values, color):
+        hi, lo = row_y + 3, row_y + row_h - 4
+        points = []
+        for k, v in enumerate(values):
+            y = hi if v else lo
+            points.append((x0 + k * step_w, y))
+            points.append((x0 + (k + 1) * step_w, y))
+        pygame.draw.lines(screen, color, False, points, 2)
+
+    def _lfsr_clock_wave(self, screen, x0, row_y, row_h, step_w, first_pulse,
+                         columns, color):
+        hi, lo = row_y + 3, row_y + row_h - 4
+        points = []
+        for k in range(columns):
+            xs = x0 + k * step_w
+            xm = xs + step_w // 2
+            xe = xs + step_w
+            if first_pulse + k == 0:          # before the first pulse
+                points += [(xs, lo), (xe, lo)]
+            else:                             # rising edge at column start
+                points += [(xs, lo), (xs, hi), (xm, hi), (xm, lo), (xe, lo)]
+        pygame.draw.lines(screen, color, False, points, 2)
+
+    def _draw_arrow(self, screen, color, x0, x1, y, width=3):
+        pygame.draw.line(screen, color, (x0, y), (x1 - 6, y), width)
+        pygame.draw.polygon(screen, color,
+                            [(x1, y), (x1 - 8, y - 5), (x1 - 8, y + 5)])
+
+    def _draw_lfsr_page(self, screen, content):
+        self.buttons = []
+        X, Y = content.x, content.y
+        state = self.lfsr_hist[-1]
+        taps = sorted(self.lfsr_taps)
+        fb = self._lfsr_feedback(state)
+
+        wire = (55, 125, 151)
+        lit = (40, 205, 130)
+        dark = (7, 27, 39)
+
+        # ---- title -----------------------------------------------------
+        title = self._fit_text("REGISTERS AND LFSRs", content.width, 20, INK)
+        screen.blit(title, (X + 3, Y + 2))
+        if self.lfsr_passed:
+            self._text(screen, "[CHALLENGE PASSED]", content.right - 190,
+                       Y + 8, DARK_GREEN, self.small_font)
+        pygame.draw.line(screen, PAGE_LINE, (X + 2, Y + 35),
+                         (content.right - 2, Y + 35), 2)
+
+        info = self._fit_text(
+            "1 SEED: click cells   2 TAPS: click TAP boxes   3 press CLOCK",
+            content.width - 6, 16, INK)
+        screen.blit(info, (X + 3, Y + 41))
+
+        # ---- register ----------------------------------------------------
+        cell_w, cell_h, gap = 56, 42, 38
+        x0 = X + 134
+        cell_y = Y + 76
+        cy = cell_y + cell_h // 2
+        tap_y = Y + 126
+        bus_y = Y + 158
+        cells = [pygame.Rect(x0 + i * (cell_w + gap), cell_y, cell_w, cell_h)
+                 for i in range(5)]
+        tap_rects = [pygame.Rect(c.x, tap_y, cell_w, 22) for c in cells]
+
+        circle_c = (X + 34, cy)
+        radius = 21
+
+        # feedback wires (drawn first so boxes sit on top)
+        if taps:
+            xs = [circle_c[0]] + [tap_rects[t].centerx for t in taps]
+            for t in taps:
+                tx = tap_rects[t].centerx
+                pygame.draw.line(screen, lit if state[t] else wire,
+                                 (tx, tap_rects[t].bottom), (tx, bus_y), 3)
+                pygame.draw.rect(screen, CYAN, (tx - 4, bus_y - 4, 8, 8))
+            pygame.draw.line(screen, wire, (min(xs), bus_y), (max(xs), bus_y), 3)
+            pygame.draw.line(screen, wire, (circle_c[0], bus_y),
+                             (circle_c[0], circle_c[1] + radius), 3)
+
+        # feedback into CELL 1
+        self._draw_arrow(screen, lit if fb else wire,
+                         circle_c[0] + radius, cells[0].x, cy)
+
+        # shifting arrows between cells
+        for i in range(4):
+            self._draw_arrow(screen, wire, cells[i].right, cells[i + 1].x, cy)
+
+        # output arrow + lamp
+        lamp = (cells[-1].right + 72, cy)
+        self._draw_arrow(screen, lit if state[-1] else wire,
+                         cells[-1].right, lamp[0] - 19, cy)
+        pygame.draw.circle(screen, lit if state[-1] else (48, 42, 43), lamp, 16)
+        pygame.draw.circle(screen, WHITE, lamp, 17, 3)
+        out_lbl = self.tiny_font.render("OUTPUT", False, MUTED)
+        screen.blit(out_lbl, out_lbl.get_rect(midtop=(lamp[0], lamp[1] + 21)))
+
+        # XOR circle
+        pygame.draw.circle(screen, dark, circle_c, radius)
+        pygame.draw.circle(screen, CYAN, circle_c, radius, 3)
+        val = self.title_font.render(str(fb), False, WHITE)
+        screen.blit(val, val.get_rect(center=circle_c))
+        xl = self.tiny_font.render("XOR", False, INK)
+        screen.blit(xl, xl.get_rect(midbottom=(circle_c[0], circle_c[1] - radius - 3)))
+        fl = self.tiny_font.render("FEEDBACK", False, MUTED)
+        screen.blit(fl, fl.get_rect(
+            midbottom=((circle_c[0] + radius + cells[0].x) // 2, cy - 5)))
+
+        # cells + taps
+        for i, rect in enumerate(cells):
+            bit = state[i]
+            pygame.draw.rect(screen, lit if bit else dark, rect)
+            pygame.draw.rect(screen, CYAN, rect, 3)
+            digit = self.title_font.render(str(bit), False, INK if bit else WHITE)
+            screen.blit(digit, digit.get_rect(center=rect.center))
+            label = "CELL 5" if i == 4 else f"CELL {i + 1}"
+            lbl = self.tiny_font.render(label, False, INK)
+            screen.blit(lbl, lbl.get_rect(midbottom=(rect.centerx, rect.y - 4)))
+            self.buttons.append((rect, ("lfsr_cell", i)))
+
+            on = i in self.lfsr_taps
+            tr = tap_rects[i]
+            pygame.draw.rect(screen, CYAN if on else PAPER, tr)
+            pygame.draw.rect(screen, INK, tr, 2)
+            t_lbl = self.small_font.render("TAP", False, (0, 60, 70) if on else MUTED)
+            screen.blit(t_lbl, t_lbl.get_rect(center=tr.center))
+            self.buttons.append((tr, ("lfsr_tap", i)))
+
+        # ---- buttons -----------------------------------------------------
+        by, bh = Y + 168, 28
+        bx = X + 3
+        if self.lfsr_predict:
+            for bit, key in ((0, "LEFT"), (1, "RIGHT")):
+                r = pygame.Rect(bx, by, 108, bh)
+                self._draw_button(screen, r, f"GUESS {bit}", False)
+                self.buttons.append((r, ("lfsr_guess", bit)))
+                bx += 116
+        else:
+            r = pygame.Rect(bx, by, 150, bh)
+            self._draw_button(screen, r, "CLOCK [SPACE]", False)
+            self.buttons.append((r, ("lfsr_clock", None)))
+            bx += 158
+        for label, action, width, sel in (
+            ("RESET [R]", ("lfsr_reset", None), 112, False),
+            ("PREDICT [P]", ("lfsr_predict", None), 150, self.lfsr_predict),
+            ("NOTES [T]", ("lfsr_notes", None), 120, False),
+        ):
+            r = pygame.Rect(bx, by, width, bh)
+            self._draw_button(screen, r, label, sel)
+            self.buttons.append((r, action))
+            bx += width + 8
+
+        # ---- timing diagram ----------------------------------------------
+        self._text(screen, "TIMING DIAGRAM: each column is one clock pulse",
+                   X + 3, Y + 202, INK, self.tiny_font)
+
+        hint = self.tiny_font.render("KEYS: 1-5 TAP   SHIFT+1-5 SEED", False, MUTED)
+        screen.blit(hint, hint.get_rect(topright=(content.right - 3, Y + 202)))
+
+        show = self.lfsr_hist[-16:]
+        columns = len(show)
+        first_pulse = self.lfsr_count - (columns - 1)
+        wave_x0 = X + 56
+        step_w = (content.width - 6 - 56 - 6) // 16
+        rows_top = Y + 230
+        row_h = 20
+        frame = pygame.Rect(X + 3, rows_top - 2, content.width - 6, 6 * row_h + 4)
+
+        pygame.draw.rect(screen, (198, 202, 205), frame)
+        pygame.draw.rect(screen, PAGE_LINE, frame, 2)
+
+        last_x = wave_x0 + (columns - 1) * step_w
+        pygame.draw.rect(screen, (185, 224, 226),
+                         (last_x, frame.y + 2, step_w, frame.height - 4))
+        for k in range(columns + 1):
+            gx = wave_x0 + k * step_w
+            pygame.draw.line(screen, PAGE_LINE, (gx, frame.y + 2),
+                             (gx, frame.bottom - 3), 1)
+        for k in range(columns):
+            num = self.tiny_font.render(str(first_pulse + k), False, MUTED)
+            screen.blit(num, num.get_rect(
+                midbottom=(wave_x0 + k * step_w + step_w // 2, frame.y - 1)))
+        pl = self.tiny_font.render("PULSE", False, MUTED)
+        screen.blit(pl, (X + 6, frame.y - 14))
+
+        names = ["CLK", "C1", "C2", "C3", "C4", "C5"]
+        colors = [(0, 120, 140)] + [DARK_GREEN] * 4 + [MAROON]
+        for r_index, name in enumerate(names):
+            ry = rows_top + r_index * row_h
+            nl = self.tiny_font.render(name, False, colors[r_index])
+            screen.blit(nl, (X + 8, ry + 3))
+            if r_index == 0:
+                self._lfsr_clock_wave(screen, wave_x0, ry, row_h, step_w,
+                                      first_pulse, columns, colors[0])
+            else:
+                values = [s[r_index - 1] for s in show]
+                self._lfsr_wave(screen, wave_x0, ry, row_h, step_w,
+                                values, colors[r_index])
+
+        # ---- output stream + explanation ----------------------------------
+        stream_y = Y + 358
+        bits = self.lfsr_out[-24:]
+        self._text(screen, "OUTPUT STREAM:", X + 3, stream_y, INK, self.small_font)
+        stream = " ".join(map(str, bits)) if bits else "(press CLOCK)"
+        self._text(screen, stream, X + 3 + 160, stream_y, MAROON, self.small_font)
+
+        lines = self._wrap_text(self._lfsr_explanation(),
+                                content.width - 10, self.small_font)
+        ty = Y + 382
+        for line in lines[:2]:
+            self._text(screen, line, X + 5, ty, INK, self.small_font)
+            ty += 22
+
+        note = self._lfsr_note()
+        if note:
+            surf = self._fit_text(note, content.width - 10, 16, DARK_GREEN)
+            screen.blit(surf, (X + 5, Y + 426))
+        if self.lfsr_msg:
+            surf = self._fit_text(self.lfsr_msg, content.width - 10, 16,
+                                  DARK_GREEN if self.lfsr_msg_ok else MAROON)
+            screen.blit(surf, (X + 5, Y + 444))
+
+        self._draw_back_button(screen)
+
+    # --------------------------------------------------------
+    # NUMBER SYSTEMS CONVERTER LAB
+    # --------------------------------------------------------
+
+    NUM_SYSTEMS = ["BINARY", "DECIMAL", "GRAY", "HEX"]
+    NUM_MAX_LEN = {0: 8, 1: 3, 2: 8, 3: 2}
+    NUM_CHARS = {0: "01", 1: "0123456789", 2: "01", 3: "0123456789ABCDEF"}
+    NUM_RULES = {
+        0: "BINARY uses only the digits 0 and 1.",
+        1: "DECIMAL uses only the digits 0 to 9.",
+        2: "GRAY CODE is written with only 0 and 1.",
+        3: "HEX uses 0-9 and A-F.",
+    }
+
+    def _topic_is_text(self):
+        """True when the open reference page is a scrollable text page."""
+        if self.page != "reference_topic":
+            return False
+        topic = self.selected_level
+        if topic == "LOGIC GATES":
+            return False
+        if topic == "REGISTERS AND LFSRs":
+            return self.lfsr_notes
+        if topic == "NUMBER SYSTEMS":
+            return self.num_notes
+        if topic == "STATE MACHINES":
+            return self.sm_notes
+        if topic == "BOOLEAN ALGEBRA":
+            return self.bool_notes
+        if topic == "KARNAUGH MAPS":
+            return self.km_notes
+        return True
+
+    def _on_numbers_page(self):
+        return (self.page == "reference_topic"
+                and self.selected_level == "NUMBER SYSTEMS")
+
+    # ---- value helpers ------------------------------------------------
+
+    def _num_value(self):
+        """Typed text -> integer 0..255, or None if empty / out of range."""
+        text, system = self.num_text, self.num_from
+        if not text:
+            return None
+        try:
+            if system == 0:
+                n = int(text, 2)
+            elif system == 1:
+                n = int(text, 10)
+            elif system == 2:
+                g = int(text, 2)
+                n, shifted = g, g >> 1
+                while shifted:
+                    n ^= shifted
+                    shifted >>= 1
+            else:
+                n = int(text, 16)
+        except ValueError:
+            return None
+        return n if 0 <= n <= 255 else None
+
+    def _num_format(self, system, n, width):
+        if system == 0:
+            return format(n, "b").zfill(width)
+        if system == 1:
+            return str(n)
+        if system == 2:
+            return format(n ^ (n >> 1), "b").zfill(width)
+        return format(n, "X").zfill((width + 3) // 4)
+
+    def _num_width(self, n):
+        text = self.num_text
+        if self.num_from in (0, 2) and text:
+            width = len(text)
+        elif self.num_from == 3 and text:
+            width = 4 * len(text)
+        else:
+            width = 4 if n < 16 else 8
+        return max(width, n.bit_length(), 1)
+
+    def _num_show_value(self, n):
+        """Write value n into the input box using the FROM system."""
+        width = 4 if n < 16 else 8
+        self.num_text = self._num_format(self.num_from, n, width)
+
+    def _num_set_from(self, system):
+        n = self._num_value()
+        self.num_from = system
+        self.num_msg = ""
+        if n is None:
+            self.num_text = ""
+        else:
+            self._num_show_value(n)
+
+    def _num_swap(self):
+        n = self._num_value()
+        self.num_from, self.num_to = self.num_to, self.num_from
+        self.num_msg = ""
+        if n is None:
+            self.num_text = ""
+        else:
+            self._num_show_value(n)
+
+    def _num_step(self, delta):
+        n = self._num_value()
+        n = 0 if n is None else n
+        self._num_show_value(max(0, min(255, n + delta)))
+        self.num_msg = ""
+
+    def _num_handle_key(self, event):
+        """Number-lab keys. Returns True when the key was used."""
+        key = event.key
+        if key == pygame.K_t:
+            self.num_notes = not self.num_notes
+            self.topic_scroll = 0
+            return True
+        if self.num_notes:
+            return False
+
+        if key == pygame.K_BACKSPACE:
+            if self.num_text:
+                self.num_text = self.num_text[:-1]
+                self.num_msg = ""
+                return True
+            return False                      # empty box: BACKSPACE = back
+        if key == pygame.K_UP:
+            self._num_step(1)
+            return True
+        if key == pygame.K_DOWN:
+            self._num_step(-1)
+            return True
+        if key == pygame.K_TAB:
+            self._num_swap()
+            return True
+        if key == pygame.K_LEFT:
+            self.num_to = (self.num_to - 1) % 4
+            return True
+        if key == pygame.K_RIGHT:
+            self.num_to = (self.num_to + 1) % 4
+            return True
+        if key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
+            return True
+
+        # B is the notebook's "back" key unless HEX is being typed.
+        if key == pygame.K_b and self.num_from != 3:
+            return False
+
+        ch = (getattr(event, "unicode", "") or "").upper()
+        if not ch:
+            if pygame.K_0 <= key <= pygame.K_9:
+                ch = chr(key)
+            elif pygame.K_a <= key <= pygame.K_f:
+                ch = chr(key).upper()
+        if not ch or not (ch.isdigit() or ch in "ABCDEF"):
+            return False
+
+        if ch not in self.NUM_CHARS[self.num_from]:
+            self.num_msg = self.NUM_RULES[self.num_from]
+            return True
+        if len(self.num_text) >= self.NUM_MAX_LEN[self.num_from]:
+            self.num_msg = "Maximum length reached (values 0 to 255)."
+            return True
+        self.num_text += ch
+        self.num_msg = ""
+        return True
+
+    # ---- step builders (one per conversion rule) -----------------------
+
+    def _num_p_bin2dec(self, b):
+        weights = [2 ** (len(b) - 1 - i) for i in range(len(b))]
+        used = [w for w, bit in zip(weights, b) if bit == "1"]
+        on = [bit == "1" for bit in b]
+        rows = [
+            ("PLACE VALUE", [str(w) for w in weights], None),
+            ("BIT", list(b), on),
+            ("BIT x VALUE", [str(w) if bit == "1" else "0"
+                             for w, bit in zip(weights, b)], on),
+        ]
+        if used:
+            line = ("Add the values where the bit is 1: "
+                    + " + ".join(map(str, used)) + f" = {sum(used)}")
+        else:
+            line = "No bit is 1, so the total is 0."
+        return {"title": "BINARY -> DECIMAL: add the place values",
+                "rows": rows, "lines": [line]}
+
+    def _num_divide(self, n, base, digits):
+        """Repeated-division table shared by DEC->BIN and DEC->HEX."""
+        if n == 0:
+            return None, "0", ["Zero is simply 0 in every number system."]
+        numbers, quotients, remainders = [], [], []
+        x = n
+        while x > 0:
+            numbers.append(str(x))
+            quotients.append(str(x // base))
+            remainders.append(digits[x % base])
+            x //= base
+        rows = [
+            ("NUMBER", numbers, None),
+            (f"DIVIDE BY {base}", quotients, None),
+            ("REMAINDER", remainders, [True] * len(remainders)),
+        ]
+        return rows, "".join(reversed(remainders)), []
+
+    def _num_p_dec2bin(self, n, b):
+        rows, raw, lines = self._num_divide(n, 2, "01")
+        if rows:
+            lines = [f"Read the remainders from LAST to FIRST: {raw}"]
+            if raw != b:
+                lines.append(f"Add leading zeros to fill {len(b)} bits: {b}")
+        return {"title": "DECIMAL -> BINARY: divide by 2",
+                "rows": rows, "lines": lines}
+
+    def _num_p_dec2hex(self, n):
+        rows, raw, lines = self._num_divide(n, 16, "0123456789ABCDEF")
+        if rows:
+            lines = [f"Read the remainders from LAST to FIRST: {raw}",
+                     "Remainders 10-15 are written A-F."]
+        return {"title": "DECIMAL -> HEX: divide by 16",
+                "rows": rows, "lines": lines}
+
+    def _num_p_gray2bin(self, g, b):
+        rows = [
+            ("GRAY", list(g), None),
+            ("RULE", ["copy"] + [f"{b[i - 1]}^{g[i]}" for i in range(1, len(g))],
+             None),
+            ("BINARY", list(b), [True] * len(b)),
+        ]
+        lines = ["First bit: copy it. Next: previous binary bit XOR this "
+                 "Gray bit.", f"Gray {g} = binary {b}"]
+        return {"title": "GRAY -> BINARY: XOR down the line",
+                "rows": rows, "lines": lines}
+
+    def _num_p_bin2gray(self, b, g):
+        rows = [
+            ("BINARY", list(b), None),
+            ("RULE", ["copy"] + [f"{b[i]}^{b[i - 1]}" for i in range(1, len(b))],
+             None),
+            ("GRAY", list(g), [True] * len(g)),
+        ]
+        lines = ["First bit: copy it. Next: this bit XOR the bit before it.",
+                 f"Binary {b} = Gray {g}"]
+        return {"title": "BINARY -> GRAY: XOR neighbouring bits",
+                "rows": rows, "lines": lines}
+
+    def _num_p_hex2bin(self, h):
+        groups = [format(int(d, 16), "04b") for d in h]
+        rows = [
+            ("HEX DIGIT", list(h), None),
+            ("DECIMAL", [str(int(d, 16)) for d in h], None),
+            ("4 BITS", groups, [True] * len(groups)),
+        ]
+        lines = ["Each hex digit becomes 4 bits (A=10 B=11 C=12 D=13 E=14 "
+                 "F=15).", "Join the groups: " + "".join(groups)]
+        return {"title": "HEX -> BINARY: 4 bits per digit",
+                "rows": rows, "lines": lines}
+
+    def _num_p_bin2hex(self, b):
+        padded = b.zfill(((len(b) + 3) // 4) * 4)
+        groups = [padded[i:i + 4] for i in range(0, len(padded), 4)]
+        digits = [format(int(g, 2), "X") for g in groups]
+        rows = [
+            ("4 BITS", groups, None),
+            ("DECIMAL", [str(int(g, 2)) for g in groups], None),
+            ("HEX DIGIT", digits, [True] * len(digits)),
+        ]
+        lines = []
+        if padded != b:
+            lines.append(f"Add leading zeros so the length is a multiple "
+                         f"of 4: {padded}")
+        lines.append("Convert each group of 4 bits (8,4,2,1): "
+                     + "".join(digits))
+        return {"title": "BINARY -> HEX: group the bits in fours",
+                "rows": rows, "lines": lines}
+
+    def _num_p_hex2dec(self, h):
+        weights = [16 ** (len(h) - 1 - i) for i in range(len(h))]
+        values = [int(d, 16) for d in h]
+        products = [v * w for v, w in zip(values, weights)]
+        on = [True] * len(h)
+        rows = [
+            ("HEX DIGIT", list(h), None),
+            ("DIGIT VALUE", [str(v) for v in values], None),
+            ("PLACE VALUE", [str(w) for w in weights], None),
+            ("VALUE x PLACE", [str(v) for v in products], on),
+        ]
+        line = ("Add the last row: " + " + ".join(map(str, products))
+                + f" = {sum(products)}")
+        return {"title": "HEX -> DECIMAL: place values of 16",
+                "rows": rows, "lines": [line]}
+
+    def _num_build(self):
+        """Returns (error, result_text, steps) for the current input."""
+        if not self.num_text:
+            return "Type a value, or press UP / the +1 button.", "", []
+        n = self._num_value()
+        if n is None:
+            return ("This lab converts values from 0 to 255 (8 bits).",
+                    "", [])
+
+        width = self._num_width(n)
+        b = format(n, "b").zfill(width)
+        g = format(n ^ (n >> 1), "b").zfill(width)
+        h = format(n, "X").zfill((width + 3) // 4)
+        frm, to = self.num_from, self.num_to
+        result = self._num_format(to, n, width)
+
+        if frm == to:
+            same = {"title": "SAME SYSTEM", "rows": None, "lines": [
+                "Both sides use the same system, so nothing changes. "
+                "Pick a different TO system."]}
+            return None, result, [same]
+
+        builders = {
+            "dec2bin": lambda: self._num_p_dec2bin(n, b),
+            "bin2dec": lambda: self._num_p_bin2dec(b),
+            "gray2bin": lambda: self._num_p_gray2bin(g, b),
+            "bin2gray": lambda: self._num_p_bin2gray(b, g),
+            "hex2bin": lambda: self._num_p_hex2bin(h),
+            "bin2hex": lambda: self._num_p_bin2hex(b),
+            "hex2dec": lambda: self._num_p_hex2dec(h),
+            "dec2hex": lambda: self._num_p_dec2hex(n),
+        }
+        pipelines = {
+            (1, 0): ["dec2bin"], (0, 1): ["bin2dec"],
+            (2, 0): ["gray2bin"], (0, 2): ["bin2gray"],
+            (3, 0): ["hex2bin"], (0, 3): ["bin2hex"],
+            (3, 1): ["hex2dec"], (1, 3): ["dec2hex"],
+            (1, 2): ["dec2bin", "bin2gray"],
+            (2, 1): ["gray2bin", "bin2dec"],
+            (2, 3): ["gray2bin", "bin2hex"],
+            (3, 2): ["hex2bin", "bin2gray"],
+        }
+        names = pipelines[(frm, to)]
+        steps = [builders[name]() for name in names]
+        if len(steps) > 1:
+            for i, step in enumerate(steps):
+                step["title"] = f"STEP {i + 1} OF {len(steps)}  " + step["title"]
+        return None, result, steps
+
+    # ---- drawing ---------------------------------------------------------
+
+    def _num_draw_table(self, screen, x, y, width, rows):
+        label_w = 118
+        columns = max(len(cells) for _l, cells, _h in rows)
+        cell_w = max(30, min(64, (width - label_w) // max(1, columns)))
+        row_h = 21
+        for r_index, (label, cells, highlight) in enumerate(rows):
+            ry = y + r_index * row_h
+            lab = self.tiny_font.render(label, False, INK)
+            screen.blit(lab, (x, ry + 4))
+            for c_index, text in enumerate(cells):
+                rect = pygame.Rect(x + label_w + c_index * cell_w, ry,
+                                   cell_w - 2, row_h - 2)
+                on = bool(highlight and highlight[c_index])
+                pygame.draw.rect(screen, (185, 224, 226) if on else PAPER, rect)
+                pygame.draw.rect(screen, CYAN if on else PAGE_LINE, rect, 2)
+                font = (self.small_font
+                        if self.small_font.size(text)[0] <= cell_w - 8
+                        else self.tiny_font)
+                surf = font.render(text, False, INK)
+                screen.blit(surf, surf.get_rect(center=rect.center))
+        return len(rows) * row_h
+
+    def _draw_numbers_page(self, screen, content):
+        self.buttons = []
+        X, Y = content.x, content.y
+        wire = (55, 125, 151)
+        lit = (40, 205, 130)
+        dark = (7, 27, 39)
+
+        title = self._fit_text("NUMBER SYSTEMS", content.width, 20, INK)
+        screen.blit(title, (X + 3, Y + 2))
+        pygame.draw.line(screen, PAGE_LINE, (X + 2, Y + 35),
+                         (content.right - 2, Y + 35), 2)
+
+        # ---- FROM / TO selectors --------------------------------------
+        for row, (label, current, action) in enumerate((
+            ("FROM", self.num_from, "num_from"),
+            ("TO", self.num_to, "num_to"),
+        )):
+            ry = Y + 43 + row * 34
+            self._text(screen, label, X + 3, ry + 6, INK, self.small_font)
+            bx = X + 62
+            for i, name in enumerate(self.NUM_SYSTEMS):
+                rect = pygame.Rect(bx, ry, 96, 28)
+                self._draw_button(screen, rect, name, i == current)
+                self.buttons.append((rect, (action, i)))
+                bx += 104
+        swap = pygame.Rect(X + 62 + 4 * 104 + 8, Y + 43, 150, 62)
+        self._draw_button(screen, swap, "SWAP [TAB]", False)
+        self.buttons.append((swap, ("num_swap", None)))
+
+        # ---- input / result -----------------------------------------------
+        err, result, steps = self._num_build()
+
+        in_lbl = f"INPUT ({self.NUM_SYSTEMS[self.num_from]})"
+        out_lbl = f"RESULT ({self.NUM_SYSTEMS[self.num_to]})"
+        self._text(screen, in_lbl, X + 3, Y + 110, INK, self.tiny_font)
+        self._text(screen, out_lbl, X + 290, Y + 110, INK, self.tiny_font)
+
+        in_box = pygame.Rect(X + 3, Y + 124, 250, 36)
+        out_box = pygame.Rect(X + 290, Y + 124, 250, 36)
+        pygame.draw.rect(screen, dark, in_box)
+        pygame.draw.rect(screen, CYAN, in_box, 3)
+        cursor = "_" if (pygame.time.get_ticks() // 500) % 2 == 0 else " "
+        shown = self.num_text + cursor
+        surf = self.title_font.render(shown, False, WHITE)
+        screen.blit(surf, surf.get_rect(midleft=(in_box.x + 10, in_box.centery)))
+
+        pygame.draw.rect(screen, dark, out_box)
+        pygame.draw.rect(screen, CYAN, out_box, 3)
+        res_surf = self.title_font.render(result or "?", False,
+                                          lit if result else LOCKED)
+        screen.blit(res_surf, res_surf.get_rect(
+            midleft=(out_box.x + 10, out_box.centery)))
+        self._draw_arrow(screen, wire, in_box.right + 3, out_box.x - 3,
+                         in_box.centery)
+
+        bx = X + 552
+        for label, width, action in (("-1", 44, "num_minus"),
+                                     ("+1", 44, "num_plus"),
+                                     ("CLR", 58, "num_clear")):
+            rect = pygame.Rect(bx, Y + 124, width, 36)
+            self._draw_button(screen, rect, label, False)
+            self.buttons.append((rect, (action, None)))
+            bx += width + 4
+
+        # ---- how it works ---------------------------------------------------
+        self._text(screen, "HOW IT WORKS", X + 3, Y + 168, INK, self.tiny_font)
+        if self.num_msg:
+            self._text(screen, self.num_msg, X + 130, Y + 168, MAROON,
+                       self.tiny_font)
+
+        max_y = self.back_button.y - 6
+        panel = pygame.Rect(X + 3, Y + 184, content.width - 6, max_y - (Y + 184))
+        pygame.draw.rect(screen, (198, 202, 205), panel)
+        pygame.draw.rect(screen, PAGE_LINE, panel, 2)
+
+        screen.set_clip(panel.inflate(-4, -4))
+        py = panel.y + 6
+        if err:
+            self._text(screen, err, panel.x + 8, py, MAROON, self.small_font)
+        else:
+            for step in steps:
+                self._text(screen, step["title"], panel.x + 8, py,
+                           DARK_GREEN, self.small_font)
+                py += 22
+                if step["rows"]:
+                    py += self._num_draw_table(screen, panel.x + 8, py,
+                                               panel.width - 16,
+                                               step["rows"]) + 4
+                for line in step["lines"]:
+                    for wrapped in self._wrap_text(line, panel.width - 20,
+                                                   self.small_font):
+                        self._text(screen, wrapped, panel.x + 10, py, INK,
+                                   self.small_font)
+                        py += 19
+                py += 8
+        screen.set_clip(None)
+
+        # ---- bottom row ---------------------------------------------------
+        notes = pygame.Rect(content.right - 130, self.back_button.y, 130,
+                            self.back_button.height)
+        self._draw_button(screen, notes, "NOTES [T]", False)
+        self.buttons.append((notes, ("num_notes", None)))
+        if self.num_from == 3:
+            hint = "TYPE 0-9 A-F   UP/DOWN: +1/-1   ESC: BACK"
+        else:
+            hint = "TYPE A VALUE   UP/DOWN: +1/-1   LEFT/RIGHT: TO"
+        h_surf = self.tiny_font.render(hint, False, MUTED)
+        screen.blit(h_surf, (self.back_button.right + 14,
+                             self.back_button.y + 8))
+
+        self._draw_back_button(screen)
+
+    # --------------------------------------------------------
+    # BOOLEAN ALGEBRA CIRCUIT LAB
+    # --------------------------------------------------------
+    # SIMULATE: pick 2, 3 or 4 variables, add gates, wire them up, and the
+    #           equation of the circuit you built appears underneath.
+    # TEST:     a goal expression is shown. Build a circuit for it; a live
+    #           table compares the GOAL output with your circuit row by row.
+    #           Solve every goal to pass.
+
+    def _on_bool_page(self):
+        return (self.page == "reference_topic"
+                and self.selected_level == "BOOLEAN ALGEBRA")
+
+    def _on_bool_lab(self):
+        return self._on_bool_page() and not self.bool_notes
+
+    def _bool_key(self):
+        """Workbench key: ("sim", n_vars) in SIMULATE, goal index in TEST."""
+        if self.bool_test:
+            return self.bool_idx
+        return ("sim", self.bool_nvars)
+
+    def _bool_names(self, key):
+        if isinstance(key, tuple):
+            return list(self.BOOL_VAR_NAMES[:key[1]])
+        return list(self.BOOL_GOALS[key]["vars"])
+
+    def _bool_get(self, key):
+        """(Circuit, Workbench) for a key; built the first time it is needed."""
+        if key not in self.bool_benches:
+            names = self._bool_names(key)
+            circuit = Circuit()
+            slots = {1: [0.5], 2: [0.30, 0.70], 3: [0.20, 0.50, 0.80],
+                     4: [0.14, 0.38, 0.62, 0.86]}[len(names)]
+            for name, ry in zip(names, slots):
+                circuit.add(Component(name, "SWITCH", 0.10, ry, label=name))
+            circuit.add(Component("Y", "LED", 0.93, 0.5, label="Y"))
+            circuit.size_scale = 0.75
+            circuit.font_scale = 0.85
+            circuit.auto_route = True
+            bench = Workbench(circuit, allow_wiring=True, allow_placing=True,
+                              allow_moving=True)
+            self.bool_benches[key] = (circuit, bench)
+        return self.bool_benches[key]
+
+    def _bool_bench(self):
+        return self._bool_get(self._bool_key())[1]
+
+    def _bool_rows(self, key):
+        """[(input_bits, goal_output_or_None, player_output_or_None)]."""
+        circuit, _bench = self._bool_get(key)
+        names = self._bool_names(key)
+        rows = circuit.truth_table(names, "Y")
+        if isinstance(key, tuple):                       # SIMULATE: no goal
+            return [(bits, None, out) for bits, out in rows]
+        goal = self.BOOL_GOALS[key]
+        return [(bits, int(goal["f"](*bits)), out) for bits, out in rows]
+
+    # ---- the equation of the circuit ----------------------------------------
+    # The equation is read from the WIRING: start at lamp Y and follow every
+    # wire back to the switches. An XOR gate on A and B reads "A XOR B".
+    # A second line shows the simplified form, worked out from the truth table.
+
+    # How tightly each kind of expression binds (used to place brackets).
+    _BOOL_PREC = {"var": 6, "not": 6, "nand": 6, "nor": 6,
+                  "and": 4, "xor": 3, "xnor": 3, "or": 2}
+
+    def _bool_not(self, node):
+        """NOT of an expression. NOT of a gate becomes the opposite gate
+        (NOT of AND is NAND), and NOT of NOT cancels."""
+        kind = node[0]
+        if kind == "var":
+            return ("not", node)
+        if kind == "not":
+            return node[1]
+        flip = {"and": "nand", "nand": "and", "or": "nor", "nor": "or",
+                "xor": "xnor", "xnor": "xor"}
+        return (flip[kind], node[1], node[2])
+
+    def _bool_expr(self, circuit, cid):
+        """Expression tree for a component, or None if any input in its
+        cone is still unwired."""
+        comp = circuit.comps[cid]
+        if comp.kind == "SWITCH":
+            return ("var", comp.label or comp.id)
+        if comp.kind in ("SOURCE", "DFF"):
+            return None
+        kids = []
+        for pin in range(comp.n_inputs):
+            src = circuit.source_of(cid, pin)
+            if src is None:
+                return None
+            sub = self._bool_expr(circuit, src)
+            if sub is None:
+                return None
+            kids.append(sub)
+        if comp.kind == "LED":
+            return kids[0]
+        if comp.kind == "NOT":
+            return self._bool_not(kids[0])
+        return (comp.kind.lower(), kids[0], kids[1])
+
+    def _bool_is_product(self, node):
+        kind = node[0]
+        if kind in ("var", "not"):
+            return True
+        if kind == "and":
+            return (self._bool_is_product(node[1])
+                    and self._bool_is_product(node[2]))
+        return False
+
+    def _bool_fmt(self, node, parent=0):
+        """Expression tree -> text. Uses A' for NOT, AB for AND of literals,
+        + for OR and the words XOR / XNOR."""
+        kind = node[0]
+        prec = self._BOOL_PREC[kind]
+
+        if kind == "var":
+            return node[1]
+        if kind == "not":
+            return node[1][1] + "'"
+        if kind in ("nand", "nor"):
+            inner = "and" if kind == "nand" else "or"
+            return "(" + self._bool_fmt((inner, node[1], node[2]), 0) + ")'"
+
+        def child(sub):
+            need = prec
+            if kind == "or" and sub[0] in ("xor", "xnor"):
+                need = 4                       # (A XOR B) + C, clearer
+            if (kind in ("xor", "xnor") and sub[0] in ("xor", "xnor")
+                    and "xnor" in (kind, sub[0])):
+                need = 4                       # never chain around an XNOR
+            return self._bool_fmt(sub, need)
+
+        a, b = child(node[1]), child(node[2])
+        if kind == "and":
+            both = (self._bool_is_product(node[1])
+                    and self._bool_is_product(node[2]))
+            text = (a + b) if both else (a + "·" + b)
+        elif kind == "or":
+            text = a + " + " + b
+        else:
+            text = a + (" XOR " if kind == "xor" else " XNOR ") + b
+
+        return "(" + text + ")" if prec < parent else text
+
+    def _bool_sop(self, ones, n):
+        """Minimal sum of products. Returns a list of terms; each term is a
+        list of literals. [] means constant 0, [[]] means constant 1."""
+        ones = frozenset(ones)
+        if not ones:
+            return []
+        if len(ones) == 2 ** n:
+            return [[]]
+        names = self.BOOL_VAR_NAMES
+        cubes = []
+        for pattern in itertools.product((0, 1, None), repeat=n):
+            cover = frozenset(
+                m for m in range(2 ** n)
+                if all(p is None or ((m >> (n - 1 - i)) & 1) == p
+                       for i, p in enumerate(pattern)))
+            if cover <= ones:
+                cubes.append((pattern, cover))
+        primes = [c for c in cubes
+                  if not any(c[1] < other[1] for other in cubes)]
+        primes.sort(key=lambda c: (-len(c[1]), sorted(c[1])))
+
+        chosen = primes
+        for count in range(1, len(primes) + 1):
+            best = None
+            for combo in itertools.combinations(primes, count):
+                if frozenset().union(*(c[1] for c in combo)) >= ones:
+                    letters = sum(1 for c in combo for p in c[0]
+                                  if p is not None)
+                    if best is None or letters < best[0]:
+                        best = (letters, list(combo))
+            if best:
+                chosen = best[1]
+                break
+
+        terms = []
+        for pattern, _cover in chosen:
+            terms.append([names[i] + ("" if p else "'")
+                          for i, p in enumerate(pattern) if p is not None])
+        # Tidy order: AB + C (not C + AB), and A'B + AB' (not AB' + A'B).
+        terms.sort(key=lambda t: ([l[0] for l in t],
+                                  [not l.endswith("'") for l in t]))
+        return terms
+
+    @staticmethod
+    def _bool_sop_text(terms):
+        if not terms:
+            return "0"
+        if terms == [[]]:
+            return "1"
+        return " + ".join("".join(t) for t in terms)
+
+    def _bool_simplest(self, rows, names):
+        """Simplest form of the circuit's behaviour, from its truth table:
+        XOR / XNOR / NAND / NOR when it is one of those, otherwise the
+        minimal sum of products."""
+        n = len(names)
+        ones = frozenset(
+            int("".join(str(int(b)) for b in bits), 2)
+            for bits, _w, out in rows if out)
+        cache_key = (tuple(names), ones)
+        if cache_key in self.bool_eq_cache:
+            return self.bool_eq_cache[cache_key]
+
+        full = frozenset(range(2 ** n))
+        sop = self._bool_sop(ones, n)
+        sop_text = self._bool_sop_text(sop)
+        named = None
+
+        # XOR / XNOR of two or more of the inputs.
+        for size in range(2, n + 1):
+            for subset in itertools.combinations(range(n), size):
+                parity = frozenset(
+                    m for m in range(2 ** n)
+                    if sum((m >> (n - 1 - i)) & 1 for i in subset) % 2)
+                if parity == ones or parity == full - ones:
+                    invert = parity != ones
+                    letters = [names[i] for i in subset]
+                    if size == 2:
+                        named = (f"{letters[0]} "
+                                 f"{'XNOR' if invert else 'XOR'} {letters[1]}")
+                    else:
+                        body = " XOR ".join(letters)
+                        named = f"({body})'" if invert else body
+                    break
+            if named:
+                break
+
+        # NAND / NOR style forms.
+        if not named and ones and ones != full:
+            comp = self._bool_sop(full - ones, n)
+            if (len(comp) == 1 and len(comp[0]) >= 2 and len(sop) > 1
+                    and all(not l.endswith("'") for l in comp[0])):
+                named = "(" + "·".join(comp[0]) + ")'"
+            elif (len(sop) == 1 and len(sop[0]) >= 2
+                  and all(l.endswith("'") for l in sop[0])
+                  and len(comp) >= 2 and all(len(t) == 1 for t in comp)):
+                named = "(" + " + ".join(t[0] for t in comp) + ")'"
+
+        result = named or sop_text
+        self.bool_eq_cache[cache_key] = result
+        return result
+
+    def _bool_equation(self, circuit, rows, names):
+        """(main, extra). main = the equation read from the wiring.
+        (None, None) while Y is not fully connected."""
+        src = circuit.source_of("Y", 0)
+        if src is None:
+            return None, None
+        tree = self._bool_expr(circuit, src)
+        if tree is None:
+            return None, None
+        main = self._bool_fmt(tree)
+
+        if rows and all(out is not None for _b, _w, out in rows):
+            best = self._bool_simplest(rows, names)
+            def plain(text):
+                return text.replace("·", "").replace(" ", "")
+            if plain(best) != plain(main):
+                def literals(text):
+                    return sum(text.count(v) for v in self.BOOL_VAR_NAMES)
+                label = ("Simplified: " if literals(best) < literals(main)
+                         else "Sum of products: ")
+                return main, label + best
+        return main, "This is already the simplest form."
+
+    # ---- actions ----------------------------------------------------------
+
+    def _bool_add(self, kind):
+        bench = self._bool_bench()
+        self.bool_msg = bench.spawn(kind, max_gates=self.BOOL_MAX_GATES)
+
+    def _bool_goto(self, idx):
+        if not self.bool_test:
+            return
+        self.bool_idx = idx % len(self.BOOL_GOALS)
+        self.bool_msg = ""
+
+    def _bool_toggle_mode(self):
+        self.bool_test = not self.bool_test
+        if self.bool_test:
+            self.bool_msg = ("Build a circuit for the goal. Solve every goal "
+                             "to pass.")
+        else:
+            self.bool_msg = ""
+
+    def _bool_set_vars(self, n):
+        self.bool_nvars = max(self.BOOL_MIN_VARS, min(self.BOOL_MAX_VARS, n))
+        self.bool_msg = ""
+
+    def _bool_reset(self):
+        self.bool_benches.pop(self._bool_key(), None)
+        self.bool_msg = "Circuit cleared. Switches and lamp are back."
+
+    def _bool_mouse(self, event):
+        """Send mouse events to the workbench. True when handled."""
+        bench = self._bool_bench()
+
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1 and any(
+                rect.collidepoint(event.pos) for rect, _a in self.buttons
+            ):
+                return False                  # a palette / control button
+            if event.button not in (1, 3):
+                return False
+            if not bench.area.collidepoint(event.pos):
+                return False
+
+        msg = bench.handle_event(event)
+        if msg:
+            self.bool_msg = msg
+        return True
+
+    def _bool_handle_key(self, event):
+        """Boolean-lab keys. Returns True when the key was used."""
+        key = event.key
+        if key == pygame.K_t:
+            self.bool_notes = not self.bool_notes
+            self.topic_scroll = 0
+            return True
+        if self.bool_notes:
+            return False
+
+        if key == pygame.K_m:
+            self._bool_toggle_mode()
+            return True
+        if key in (pygame.K_UP, pygame.K_DOWN, pygame.K_w, pygame.K_s,
+                   pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
+            return True
+        if key == pygame.K_LEFT:
+            if self.bool_test:
+                self._bool_goto(self.bool_idx - 1)
+            else:
+                self._bool_set_vars(self.bool_nvars - 1)
+            return True
+        if key == pygame.K_RIGHT:
+            if self.bool_test:
+                self._bool_goto(self.bool_idx + 1)
+            else:
+                self._bool_set_vars(self.bool_nvars + 1)
+            return True
+        if key == pygame.K_r:
+            self._bool_reset()
+            return True
+
+        digits = (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4,
+                  pygame.K_5, pygame.K_6, pygame.K_7)
+        if key in digits:
+            self._bool_add(self.BOOL_PALETTE[digits.index(key)])
+            return True
+        return False
+
+    # ---- drawing ------------------------------------------------------------
+
+    def _draw_bool_lab(self, screen, content):
+        self.buttons = []
+        X, Y = content.x, content.y
+        test = self.bool_test
+        key = self._bool_key()
+        idx = self.bool_idx
+        total = len(self.BOOL_GOALS)
+        circuit, bench = self._bool_get(key)
+        rows = self._bool_rows(key)
+        names = self._bool_names(key)
+
+        matches, solved = 0, False
+        if test:
+            matches = sum(1 for _b, g, m in rows if m == g)
+            solved = bool(rows) and matches == len(rows)
+            if solved:
+                self.bool_solved.add(idx)
+
+        # ---- title / mode tag ---------------------------------------------
+        title = self._fit_text("BOOLEAN ALGEBRA", content.width, 20, INK)
+        screen.blit(title, (X + 3, Y + 2))
+        if test:
+            tag = f"TEST MODE  SOLVED {len(self.bool_solved)}/{total}"
+            if len(self.bool_solved) == total:
+                tag += "  [PASSED]"
+            tag_col = MAROON
+        else:
+            tag, tag_col = "SIMULATE", DARK_GREEN
+        tag_s = self.small_font.render(tag, False, tag_col)
+        screen.blit(tag_s, tag_s.get_rect(topright=(content.right - 3, Y + 8)))
+        pygame.draw.line(screen, PAGE_LINE, (X + 2, Y + 35),
+                         (content.right - 2, Y + 35), 2)
+
+        # ---- variables selector (SIMULATE) / goal expression (TEST) --------
+        if test:
+            goal = self.BOOL_GOALS[idx]
+            goal_text = f"GOAL {idx + 1}/{total}:   Y = {goal['expr']}"
+            surf = self._fit_text(goal_text, content.width - 130, 22, MAROON)
+            screen.blit(surf, (X + 3, Y + 42))
+            if solved:
+                t = self.small_font.render("[SOLVED]", False, DARK_GREEN)
+                screen.blit(t, t.get_rect(topright=(content.right - 3, Y + 46)))
+        else:
+            self._text(screen, "VARIABLES:", X + 3, Y + 48, INK,
+                       self.small_font)
+            bx = X + 130
+            for n in range(self.BOOL_MIN_VARS, self.BOOL_MAX_VARS + 1):
+                rect = pygame.Rect(bx, Y + 42, 100, 28)
+                self._draw_button(screen, rect, f"{n} VARS",
+                                  n == self.bool_nvars)
+                self.buttons.append((rect, ("bool_vars", n)))
+                bx += 108
+            self._text(screen, "Inputs: " + ", ".join(names), bx + 8, Y + 48,
+                       MUTED, self.small_font)
+
+        # ---- gate palette -----------------------------------------------
+        gap = 6
+        n_gates = len(self.BOOL_PALETTE)
+        pal_w = (content.width - 6 - gap * (n_gates - 1)) // n_gates
+        for i, kind in enumerate(self.BOOL_PALETTE):
+            rect = pygame.Rect(X + 3 + i * (pal_w + gap), Y + 74, pal_w, 28)
+            self._draw_button(screen, rect, f"{i + 1} {kind}", False)
+            self.buttons.append((rect, ("bool_add", kind)))
+
+        # ---- control row ------------------------------------------------
+        if test:
+            controls = (("< PREV", "bool_prev", 110),
+                        ("NEXT >", "bool_next", 110),
+                        ("RESET [R]", "bool_reset", 120),
+                        ("SIMULATE [M]", "bool_mode", 170))
+        else:
+            controls = (("RESET [R]", "bool_reset", 120),
+                        ("TEST MODE [M]", "bool_mode", 170))
+        bx = X + 3
+        for label, action, width in controls:
+            rect = pygame.Rect(bx, Y + 108, width, 26)
+            self._draw_button(screen, rect, label, False)
+            self.buttons.append((rect, (action, None)))
+            bx += width + 8
+        gates_txt = self.small_font.render(
+            f"GATES {circuit.count_gates()}/{self.BOOL_MAX_GATES}", False, INK)
+        screen.blit(gates_txt, (bx + 6, Y + 113))
+
+        # ---- workbench ----------------------------------------------------
+        top = Y + 142
+        eq_h = 0 if test else 34              # room for the equation box
+        bench_h = max(140, self.back_button.y - 26 - eq_h - top)
+        bench_w = int(content.width * 0.64)
+        bench.area = pygame.Rect(X + 3, top, bench_w, bench_h)
+        bench.draw(screen)
+
+        # ---- live truth table ---------------------------------------------
+        table_x = bench.area.right + 12
+        table_w = content.right - table_x - 3
+        self._text(screen, "LIVE TRUTH TABLE", table_x, top - 1, INK,
+                   self.tiny_font)
+
+        headers = list(names) + (["GOAL", "MINE"] if test else ["Y"])
+        col_w = max(1, table_w // len(headers))
+        row_h = max(15, min(24, (bench_h - 72) // (len(rows) + 1)))
+        table_top = top + 17
+
+        for col, head in enumerate(headers):
+            cell = pygame.Rect(table_x + col * col_w, table_top, col_w, row_h)
+            pygame.draw.rect(screen, PAPER_LIGHT, cell)
+            pygame.draw.rect(screen, PAGE_LINE, cell, 2)
+            surf = self.tiny_font.render(head, False, INK)
+            screen.blit(surf, surf.get_rect(center=cell.center))
+
+        good, bad = (190, 228, 205), (232, 190, 195)
+        for r_index, (bits, want, got) in enumerate(rows):
+            ry = table_top + (r_index + 1) * row_h
+            if test:
+                if got is None:
+                    mine_fill, mine_edge = PAPER, PAGE_LINE
+                elif got == want:
+                    mine_fill, mine_edge = good, DARK_GREEN
+                else:
+                    mine_fill, mine_edge = bad, MAROON
+                values = list(bits) + [want, "?" if got is None else got]
+            else:
+                lit_row = got is not None and got == 1
+                mine_fill = (185, 224, 226) if lit_row else PAPER
+                mine_edge = CYAN if lit_row else PAGE_LINE
+                values = list(bits) + ["?" if got is None else got]
+            for col, val in enumerate(values):
+                cell = pygame.Rect(table_x + col * col_w, ry, col_w, row_h)
+                last = col == len(values) - 1
+                pygame.draw.rect(screen, mine_fill if last else PAPER, cell)
+                pygame.draw.rect(screen, mine_edge if last else PAGE_LINE,
+                                 cell, 2 if last else 1)
+                surf = self.tiny_font.render(str(val), False, INK)
+                screen.blit(surf, surf.get_rect(center=cell.center))
+
+        if test:
+            sy = table_top + (len(rows) + 1) * row_h + 8
+            self._text(screen, f"ROWS OK: {matches}/{len(rows)}", table_x, sy,
+                       DARK_GREEN if solved else INK, self.small_font)
+
+        # ---- equation box (SIMULATE) --------------------------------------
+        extra = None
+        if not test:
+            main, extra = self._bool_equation(circuit, rows, names)
+            eq_rect = pygame.Rect(X + 3, bench.area.bottom + 3,
+                                  content.width - 6, 30)
+            pygame.draw.rect(screen, (7, 27, 39), eq_rect)
+            pygame.draw.rect(screen, CYAN, eq_rect, 3)
+            if main is None:
+                eq_text = "Y = ?   (wire the gates into Y)"
+                eq_col = (140, 160, 170)
+            else:
+                eq_text, eq_col = "Y = " + main, WHITE
+            eq_s = self._fit_text(eq_text, eq_rect.width - 20, 22, eq_col)
+            screen.blit(eq_s, eq_s.get_rect(
+                midleft=(eq_rect.x + 10, eq_rect.centery)))
+
+        # ---- status line ----------------------------------------------------
+        if test:
+            if solved:
+                msg, colour = ("SOLVED! Your circuit matches the goal on every "
+                               "row.", DARK_GREEN)
+            elif self.bool_msg:
+                msg, colour = self.bool_msg, INK
+            elif any(m is None for _b, _g, m in rows):
+                msg, colour = ("Y is not connected yet. Wire switches into "
+                               "gates, then the last gate into Y.", MUTED)
+            else:
+                msg, colour = ("Red rows do not match the goal yet. Click the "
+                               "switches to test.", MUTED)
+        elif self.bool_msg:
+            msg, colour = self.bool_msg, INK
+        elif extra:
+            msg, colour = extra, DARK_GREEN
+        else:
+            msg, colour = ("Add gates, wire the switches into them and the "
+                           "last gate into Y. The equation appears above.",
+                           MUTED)
+        surf = self._fit_text(msg, content.width - 6, 15, colour)
+        screen.blit(surf, (X + 3, bench.area.bottom + 5 + eq_h))
+
+        # ---- bottom row -----------------------------------------------------
+        notes = pygame.Rect(content.right - 130, self.back_button.y, 130,
+                            self.back_button.height)
+        self._draw_button(screen, notes, "NOTES [T]", False)
+        self.buttons.append((notes, ("bool_notes", None)))
+        hint = ("DRAG PIN TO PIN: WIRE   RIGHT-CLICK: DELETE   LEFT/RIGHT: "
+                + ("GOAL" if test else "VARIABLES"))
+        room = notes.x - (self.back_button.right + 14) - 8
+        h_surf = self._fit_text(hint, room, 12, MUTED)
+        screen.blit(h_surf, (self.back_button.right + 14,
+                             self.back_button.y + 8))
 
         self._draw_back_button(screen)
 
@@ -1227,14 +3986,14 @@ class DetectiveNotebook:
     # BACK BUTTON
     # --------------------------------------------------------
 
-    def _draw_back_button(self, screen):
+    def _draw_back_button(self, screen, label="BACK [B]"):
         if self.back_button is None:
             return
 
         self._draw_button(
             screen,
             self.back_button,
-            "BACK [B]",
+            label,
             selected=False,
         )
 
@@ -1260,3 +4019,474 @@ class DetectiveNotebook:
 
         elif self.page == "reference_topic":
             self._draw_reference_topic(screen, content)
+
+    # --------------------------------------------------------
+    # KARNAUGH MAP LAB
+    # --------------------------------------------------------
+    # SIMULATE: click cells (0 -> 1 -> X). The biggest groups, the minimal
+    #           equation and the reason for every term appear on their own.
+    # TEST:     a fixed map is given. The player selects cells, saves each
+    #           group and checks. Same rules as the Level 5 puzzle: only
+    #           1s and Xs, rectangles of 1/2/4/8/16, wraparound, biggest
+    #           possible groups, fewest groups. 5 correct in a row passes.
+
+    def _on_km_page(self):
+        return (self.page == "reference_topic"
+                and self.selected_level == "KARNAUGH MAPS")
+
+    def _km_minterm(self, r, c):
+        return (self.KM_GRAY[r] << 2) | self.KM_GRAY[c]
+
+    def _km_pos(self, m):
+        return self.KM_GRAY.index(m >> 2), self.KM_GRAY.index(m & 3)
+
+    def _km_build_rects(self):
+        """Every legal group: straight rectangles with wraparound."""
+        groups = set()
+        for height in (1, 2, 4):
+            for width in (1, 2, 4):
+                for r0 in range(4):
+                    for c0 in range(4):
+                        groups.add(frozenset(
+                            self._km_minterm((r0 + dr) % 4, (c0 + dc) % 4)
+                            for dr in range(height) for dc in range(width)
+                        ))
+        return groups
+
+    def _km_term(self, group):
+        """(term, stay-list, change-list) for one group of minterms."""
+        term, stay, change = "", [], []
+        for bit in (3, 2, 1, 0):
+            letter = self.KM_VARS[3 - bit]
+            values = {(m >> bit) & 1 for m in group}
+            if values == {1}:
+                term += letter
+                stay.append(f"{letter}=1")
+            elif values == {0}:
+                term += letter + "'"
+                stay.append(f"{letter}=0")
+            else:
+                change.append(letter)
+        return term or "1", stay, change
+
+    def _km_detail(self, group):
+        _term, stay, change = self._km_term(group)
+        text = (" ".join(stay) + " stay") if stay else "nothing stays"
+        if change:
+            verb = "changes" if len(change) == 1 else "change"
+            text += "; " + ",".join(change) + " " + verb + " (dropped)"
+        return text
+
+    def _km_wraps(self, group):
+        rows = {self._km_pos(m)[0] for m in group}
+        cols = {self._km_pos(m)[1] for m in group}
+        return any(0 in s and 3 in s and len(s) < 4 for s in (rows, cols))
+
+    def _km_equation(self, groups):
+        terms = []
+        for group in groups:
+            term = self._km_term(group)[0]
+            if term not in terms:
+                terms.append(term)
+        return " + ".join(terms) if terms else "0"
+
+    def _km_primes(self, ones, dc):
+        usable = ones | dc
+        valid = [g for g in self.km_all_groups if g <= usable and g & ones]
+        return {g for g in valid if not any(g < other for other in valid)}
+
+    def _km_cover(self, ones, dc):
+        """Fewest prime groups that cover every 1 (then fewest letters)."""
+        key = (frozenset(ones), frozenset(dc))
+        if key in self.km_cache:
+            return self.km_cache[key]
+        result = []
+        if ones:
+            primes = sorted(self._km_primes(ones, dc),
+                            key=lambda g: (-len(g), sorted(g)))
+            result = primes
+            for count in range(1, len(primes) + 1):
+                best = None
+                for combo in itertools.combinations(primes, count):
+                    if set().union(*combo) >= ones:
+                        letters = sum(
+                            0 if self._km_term(g)[0] == "1"
+                            else len(self._km_term(g)[0].replace("'", ""))
+                            for g in combo)
+                        if best is None or letters < best[0]:
+                            best = (letters, list(combo))
+                if best:
+                    result = best[1]
+                    break
+        self.km_cache[key] = result
+        return result
+
+    def _km_sets(self):
+        if self.km_test:
+            case = self.KM_TESTS[self.km_test_idx]
+            return set(case["ones"]), set(case["dc"])
+        ones = {m for m in range(16) if self.km_vals[m] == 1}
+        dc = {m for m in range(16) if self.km_vals[m] == 2}
+        return ones, dc
+
+    def _km_say(self, text, ok=True):
+        self.km_msg = text
+        self.km_msg_ok = ok
+
+    def _km_load_example(self, index):
+        self.km_ex = index % len(self.KM_EXAMPLES)
+        name, ones, dc = self.KM_EXAMPLES[self.km_ex]
+        self.km_vals = [1 if m in ones else 2 if m in dc else 0
+                        for m in range(16)]
+        self.km_label = f"EXAMPLE {self.km_ex + 1}/{len(self.KM_EXAMPLES)}: {name}"
+        self._km_say("")
+
+    def _km_clear(self):
+        if self.km_test:
+            self.km_sel.clear()
+            self.km_groups.clear()
+            self._km_say("Selection and saved groups cleared.")
+        else:
+            self.km_vals = [0] * 16
+            self.km_label = "YOUR OWN MAP"
+            self._km_say("Map cleared. Click cells to make 1s.")
+
+    def _km_toggle_mode(self):
+        self.km_test = not self.km_test
+        self.km_sel.clear()
+        self.km_groups.clear()
+        if self.km_test:
+            self._km_say("Group all the 1s. Click cells, SPACE saves a "
+                         "group, ENTER checks. 5 right in a row to pass.")
+        else:
+            self._km_say("")
+
+    def _km_cell(self, m):
+        if self.km_test:
+            if m in self.km_sel:
+                self.km_sel.remove(m)
+            else:
+                self.km_sel.add(m)
+            self._km_say(f"{len(self.km_sel)} cell(s) selected. "
+                         "Press SPACE to save the group.")
+        else:
+            self.km_vals[m] = (self.km_vals[m] + 1) % 3
+            self.km_label = "YOUR OWN MAP"
+            self._km_say("")
+
+    def _km_save(self):
+        if not self.km_test:
+            return
+        ones, dc = self._km_sets()
+        if not self.km_sel:
+            self._km_say("Select one or more cells first.", ok=False)
+            return
+        group = frozenset(self.km_sel)
+        if group not in self.km_all_groups:
+            self._km_say("Invalid shape. Use a rectangle of 1, 2, 4, 8 or 16 "
+                         "cells. Wrapping is allowed; diagonals are not.",
+                         ok=False)
+            return
+        if not group <= (ones | dc):
+            self._km_say("A group may hold 1s and Xs, never 0s.", ok=False)
+            return
+        if not group & ones:
+            self._km_say("A group needs at least one 1 (Xs alone are not "
+                         "enough).", ok=False)
+            return
+        if group in self.km_groups:
+            self.km_sel.clear()
+            self._km_say("That group is already saved.", ok=False)
+            return
+        if group not in self._km_primes(ones, dc):
+            self.km_sel.clear()
+            self._km_say("This group can be bigger. Look for a larger "
+                         "rectangle (use wraparound and Xs).", ok=False)
+            return
+        self.km_groups.append(group)
+        self.km_sel.clear()
+        term = self._km_term(group)[0]
+        self._km_say(f"Group {len(self.km_groups)} saved: {term}. Groups may "
+                     "overlap. Cover every 1, then press ENTER.")
+
+    def _km_undo(self):
+        if self.km_sel:
+            self.km_sel.clear()
+            self._km_say("Selection cleared.")
+        elif self.km_groups:
+            self.km_groups.pop()
+            self._km_say("Last saved group removed.")
+
+    def _km_check(self):
+        if not self.km_test:
+            return
+        ones, dc = self._km_sets()
+        if not self.km_groups:
+            self._km_say("Save at least one group first.", ok=False)
+            return
+        covered = set().union(*self.km_groups)
+        missing = sorted(ones - covered)
+        needed = len(self._km_cover(ones, dc))
+        if missing:
+            self.km_streak = 0
+            self._km_say("Still uncovered: " + ", ".join(f"m{m}" for m in missing)
+                         + ". Streak reset.", ok=False)
+            return
+        if len(self.km_groups) > needed:
+            self.km_streak = 0
+            self._km_say("Everything is covered, but it is not simplified. "
+                         f"Use only {needed} group(s). Streak reset.", ok=False)
+            return
+
+        equation = self._km_equation(self.km_groups)
+        self.km_streak += 1
+        if self.km_streak >= 5:
+            self.km_passed = True
+            self._km_say(f"CHALLENGE PASSED! F = {equation}. You can simplify "
+                         "a K-map.")
+        else:
+            self._km_say(f"CORRECT! F = {equation}. Streak "
+                         f"{self.km_streak}/5. Next map.")
+        self.km_test_idx = (self.km_test_idx + 1) % len(self.KM_TESTS)
+        self.km_groups.clear()
+        self.km_sel.clear()
+
+    def _km_handle_key(self, event):
+        """K-map-page keys. Returns True when the key was used."""
+        key = event.key
+        if key == pygame.K_t:
+            self.km_notes = not self.km_notes
+            self.topic_scroll = 0
+            return True
+        if self.km_notes:
+            return False
+        if key == pygame.K_m:
+            self._km_toggle_mode()
+            return True
+        if key in (pygame.K_UP, pygame.K_DOWN, pygame.K_LEFT, pygame.K_RIGHT,
+                   pygame.K_w, pygame.K_s):
+            return True
+
+        if self.km_test:
+            if key == pygame.K_SPACE:
+                self._km_save()
+                return True
+            if key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                self._km_check()
+                return True
+            if key == pygame.K_r:
+                self._km_clear()
+                return True
+            if key == pygame.K_BACKSPACE:
+                if self.km_sel or self.km_groups:
+                    self._km_undo()
+                    return True
+                return False                  # nothing to undo: BACKSPACE = back
+        else:
+            if key == pygame.K_c:
+                self._km_clear()
+                return True
+            if key == pygame.K_e:
+                self._km_load_example(self.km_ex + 1)
+                return True
+            if key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_KP_ENTER):
+                return True
+        return False
+
+    def _draw_kmap_lab(self, screen, content):
+        self.buttons = []
+        X, Y = content.x, content.y
+        test = self.km_test
+        ones, dc = self._km_sets()
+        groups = list(self.km_groups) if test else self._km_cover(ones, dc)
+        colours = self.KM_COLOURS
+
+        # ---- title / mode tag ------------------------------------------
+        title = self._fit_text("KARNAUGH MAPS", content.width, 20, INK)
+        screen.blit(title, (X + 3, Y + 2))
+        if test:
+            tag = f"TEST MODE  STREAK {self.km_streak}/5"
+        else:
+            tag = "SIMULATE"
+        if self.km_passed:
+            tag += "  [PASSED]"
+        tag_s = self.small_font.render(tag, False, MAROON if test else DARK_GREEN)
+        screen.blit(tag_s, tag_s.get_rect(topright=(content.right - 3, Y + 8)))
+        pygame.draw.line(screen, PAGE_LINE, (X + 2, Y + 35),
+                         (content.right - 2, Y + 35), 2)
+
+        if test:
+            info = (f"TEST {self.km_test_idx + 1}/{len(self.KM_TESTS)}: group "
+                    "every 1. Click cells, SPACE saves, ENTER checks.")
+        else:
+            info = ("Click a cell: 0 -> 1 -> X. The groups and the equation "
+                    "appear by themselves.")
+        info_s = self._fit_text(info, content.width - 6, 16, INK)
+        screen.blit(info_s, (X + 3, Y + 41))
+
+        # ---- grid ----------------------------------------------------------
+        lw, lh = 44, 22
+        cw = max(36, min(64, (int(content.width * 0.42) - lw) // 4))
+        ch = 50 if content.height >= 560 else 40
+        gx, gy = X + 3 + lw, Y + 96
+        big = self.title_font if ch >= 48 else self.body_font
+
+        corner = self.tiny_font.render("AB\\CD", False, CYAN)
+        screen.blit(corner, corner.get_rect(center=(gx - lw // 2, gy - lh // 2)))
+        for i, label in enumerate(self.KM_LABELS):
+            col = self.tiny_font.render(label, False, (0, 91, 103))
+            screen.blit(col, col.get_rect(
+                center=(gx + i * cw + cw // 2, gy - lh // 2)))
+            row = self.tiny_font.render(label, False, (0, 91, 103))
+            screen.blit(row, row.get_rect(
+                center=(gx - lw // 2, gy + i * ch + ch // 2)))
+
+        for m in range(16):
+            r, c = self._km_pos(m)
+            rect = pygame.Rect(gx + c * cw, gy + r * ch, cw, ch)
+            if test:
+                value = 1 if m in ones else 2 if m in dc else 0
+            else:
+                value = self.km_vals[m]
+            if test and m in self.km_sel:
+                fill, ink = CYAN, (0, 45, 55)
+            elif value == 1:
+                fill, ink = (24, 145, 145), WHITE
+            elif value == 2:
+                fill, ink = (145, 105, 35), WHITE
+            else:
+                fill, ink = (17, 35, 52), WHITE
+            pygame.draw.rect(screen, fill, rect)
+            pygame.draw.rect(screen, PAGE_LINE, rect, 2)
+            v_s = big.render(("0", "1", "X")[value], False, ink)
+            screen.blit(v_s, v_s.get_rect(
+                center=(rect.centerx, rect.y + int(ch * 0.38))))
+            m_s = self.tiny_font.render(f"m{m}", False, ink)
+            screen.blit(m_s, m_s.get_rect(
+                center=(rect.centerx, rect.bottom - 9)))
+            self.buttons.append((rect, ("km_cell", m)))
+
+        # Group outlines (inset a little more each time so overlaps show).
+        for index, group in enumerate(groups):
+            colour = colours[index % len(colours)]
+            inset = 5 + (index % 4) * 3
+            for m in group:
+                r, c = self._km_pos(m)
+                rect = pygame.Rect(gx + c * cw, gy + r * ch, cw, ch)
+                pygame.draw.rect(screen, colour, rect.inflate(-inset, -inset), 3)
+
+        grid_bottom = gy + 4 * ch
+
+        # ---- groups panel --------------------------------------------------
+        px = gx + 4 * cw + 18
+        panel = pygame.Rect(px, Y + 70, content.right - px - 3,
+                            grid_bottom - (Y + 70))
+        pygame.draw.rect(screen, (198, 202, 205), panel)
+        pygame.draw.rect(screen, PAGE_LINE, panel, 2)
+        head = "SAVED GROUPS" if test else "GROUPS FOUND"
+        screen.blit(self.tiny_font.render(head, False, INK),
+                    (panel.x + 8, panel.y + 6))
+        screen.set_clip(panel.inflate(-4, -4))
+        ty = panel.y + 24
+        if not groups:
+            if test:
+                text = "No groups saved yet."
+            elif ones:
+                text = "No groups."
+            else:
+                text = "No 1s on the map yet. Click cells to make some."
+            for line in self._wrap_text(text, panel.width - 16, self.small_font):
+                self._text(screen, line, panel.x + 8, ty, MUTED, self.small_font)
+                ty += 20
+        for index, group in enumerate(groups):
+            colour = colours[index % len(colours)]
+            term = self._km_term(group)[0]
+            wrap = "  (wraps)" if self._km_wraps(group) else ""
+            self._text(screen, f"G{index + 1}: {term}   {len(group)} cells{wrap}",
+                       panel.x + 8, ty, colour, self.small_font)
+            ty += 19
+            cells = " ".join(f"m{m}" for m in sorted(group))
+            for line in self._wrap_text(cells, panel.width - 20, self.tiny_font):
+                self._text(screen, line, panel.x + 12, ty, INK, self.tiny_font)
+                ty += 15
+            for line in self._wrap_text(self._km_detail(group),
+                                        panel.width - 20, self.tiny_font):
+                self._text(screen, line, panel.x + 12, ty, MUTED, self.tiny_font)
+                ty += 15
+            ty += 6
+        screen.set_clip(None)
+
+        # ---- buttons -------------------------------------------------------
+        by = grid_bottom + 10
+        bx = X + 3
+        if test:
+            row = (("LAB [M]", "km_mode", 100), ("SAVE [SPACE]", "km_save", 150),
+                   ("CHECK [ENTER]", "km_check", 160),
+                   ("UNDO [BKSP]", "km_undo", 140))
+        else:
+            row = (("TEST MODE [M]", "km_mode", 160),
+                   ("CLEAR [C]", "km_clear", 120),
+                   ("EXAMPLE [E]", "km_example", 140))
+        for label, action, width in row:
+            rect = pygame.Rect(bx, by, width, 28)
+            self._draw_button(screen, rect, label, False)
+            self.buttons.append((rect, (action, None)))
+            bx += width + 8
+
+        # ---- equation ------------------------------------------------------
+        eq_rect = pygame.Rect(X + 3, by + 38, content.width - 6, 36)
+        pygame.draw.rect(screen, (7, 27, 39), eq_rect)
+        pygame.draw.rect(screen, CYAN, eq_rect, 3)
+        if test:
+            eq_text = "YOUR F = " + (self._km_equation(groups) if groups else "?")
+        elif not ones:
+            eq_text = "F = 0"
+        else:
+            eq_text = "F = " + self._km_equation(groups)
+        eq_s = self._fit_text(eq_text, eq_rect.width - 20, 25, WHITE)
+        screen.blit(eq_s, eq_s.get_rect(midleft=(eq_rect.x + 10, eq_rect.centery)))
+
+        # ---- explanation / feedback ---------------------------------------
+        ty = eq_rect.bottom + 10
+        limit = self.back_button.y - 6
+
+        def put(text, colour, font=None, gap=21):
+            nonlocal ty
+            font = font or self.small_font
+            for line in self._wrap_text(text, content.width - 10, font):
+                if ty + gap > limit:
+                    return
+                self._text(screen, line, X + 5, ty, colour, font)
+                ty += gap
+
+        if test:
+            if self.km_msg:
+                put(self.km_msg, DARK_GREEN if self.km_msg_ok else MAROON)
+            if self.km_sel:
+                put("Selected: " + " ".join(f"m{m}" for m in sorted(self.km_sel)),
+                    INK)
+        else:
+            put(self.km_label, INK)
+            put(f"1s: {len(ones)}    Xs: {len(dc)}    Groups: {len(groups)}",
+                INK)
+            if self.km_msg:
+                put(self.km_msg, DARK_GREEN if self.km_msg_ok else MAROON)
+            put("Rule: a variable that STAYS the same inside a group is kept. "
+                "One that CHANGES is dropped.", MUTED)
+            if dc:
+                put("X cells are don't-cares: the groups may use them, but they "
+                    "never have to be covered.", MUTED)
+
+        # ---- bottom row ----------------------------------------------------
+        notes = pygame.Rect(content.right - 130, self.back_button.y, 130,
+                            self.back_button.height)
+        self._draw_button(screen, notes, "NOTES [T]", False)
+        self.buttons.append((notes, ("km_notes", None)))
+        hint = ("CLICK CELLS: SELECT   SPACE: SAVE   ENTER: CHECK" if test
+                else "CLICK CELLS: 0/1/X   E: EXAMPLE   M: TEST MODE")
+        room = notes.x - (self.back_button.right + 14) - 8
+        h_surf = self._fit_text(hint, room, 12, MUTED)
+        screen.blit(h_surf, (self.back_button.right + 14,
+                             self.back_button.y + 8))
+
+        self._draw_back_button(screen)
