@@ -732,11 +732,10 @@ def draw_laboratory_screen(
         border_radius=4,
     )
 
-    # First line: restored systems count.
+    # First line: restored systems count (6 laboratory sector puzzles).
     progress_text = (
         f"SYSTEMS RESTORED: "
-        f"{progress.get_completed_count()}/"
-        f"{len(progress.puzzle_order)}"
+        f"{min(progress.get_completed_count(), 6)}/6"
     )
 
     progress_font = pygame.font.SysFont(
