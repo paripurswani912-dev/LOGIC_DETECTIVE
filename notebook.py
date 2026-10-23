@@ -102,12 +102,12 @@ class DetectiveNotebook:
         ],
         "level_three": [
             "I traced the memory protocol one transition at a time and compared each state against the required sequence until the state machine advanced correctly.",
-            "Recorded state sequence: A-A-B-C-D-C.",
+            "Recorded state sequence: A-B-A-C-D-C.",
         ],
         "level_four": [
             "I tested the override expression against the original Boolean function instead of trusting the terminal's claim. The accepted form had to match for every required input combination.",
             "Recorded bomb-risk value: 10.",
-            "Recorded equivalent expression: XNOR(D, B) + B C' (as written in the recovered clue).",
+            "Recorded equivalent expression: Y = A'B' + (C XNOR D) (as written in the recovered clue).",
         ],
         "level_five": [
             "I rebuilt the vault-alarm logic using the available two-input gates, then checked the output against the required function rather than relying on the wire layout.",

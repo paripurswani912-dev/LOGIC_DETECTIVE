@@ -86,9 +86,9 @@ DECOY_MUTATIONS = {
         "3 5 9 14 3 5 7 12",
         "3 5 9 14 3 5 8 11",
     ],
-    "L3": ["A-B-C-A-D-C", "A-B-A-C-C-D", "A-B-A-D-C-C", "A-A-B-C-D-C"],
+    "L3": ["A-B-C-A-D-C", "A-B-A-C-C-D", "A-B-A-D-C-C", "A-B-A-C-D-C"],
     "L4": ["6", "12", "8"],
-    "L5": ["B XOR D + B C'", "B XNOR D + B C"],
+    "L5": ["B'D' + BD + C'D'", "B XNOR D + B C"],
     "L6": ["K9 / 01101", "7K / 01101", "K7 / 10110"],
 }
 

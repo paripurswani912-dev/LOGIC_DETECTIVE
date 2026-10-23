@@ -212,11 +212,28 @@ class NexusGatesCircuitMixin:
 
             btn_x += btn_w + btn_gap
 
-        # Gates count badge
+        # Gates count: sits right after the last palette button, as
+        # "| GATES: 3/4". The number updates every frame from the circuit.
         current_gates = self.workbench.circuit.count_gates()
         cnt_text = f"GATES: {current_gates}/{MAX_GATES}"
         cnt_col = RED if current_gates > MAX_GATES else (GREEN if current_gates > 0 else GREY)
-        self._text(screen, cnt_text, gate_font, cnt_col, palette_panel.right - 14, palette_panel.centery, center=False)
+
+        # btn_x is already just past the last button (loop adds width + gap).
+        sep_x = btn_x + max(6, int(10 * scale))
+        sep_w = gate_font.size("|")[0]
+        self._text(
+            screen, "|", gate_font, CYAN_DIM,
+            sep_x + sep_w // 2, palette_panel.centery, center=True,
+        )
+
+        cnt_x = sep_x + sep_w + max(8, int(12 * scale))
+        cnt_max_w = max(40, palette_panel.right - cnt_x - 12)
+        cnt_font = self._fit_font(cnt_text, cnt_max_w, max(10, int(13 * scale)))
+        cnt_w = cnt_font.size(cnt_text)[0]
+        self._text(
+            screen, cnt_text, cnt_font, cnt_col,
+            cnt_x + cnt_w // 2, palette_panel.centery, center=True,
+        )
 
         # 3. Workbench Canvas
         bottom_h = max(48, int(54 * scale))
