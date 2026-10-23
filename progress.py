@@ -10,6 +10,7 @@ class ProgressManager:
             "final_override",
             "logic_architect",
             "signal_breaker",
+            "nexus_gates",
         ]
         self.completed_puzzles = set()
 
