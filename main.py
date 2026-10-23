@@ -19,6 +19,8 @@ from puzzles.memory_protocol import MemoryProtocolPuzzle
 from puzzles.final_override import FinalOverridePuzzle
 from puzzles.logic_architect import LogicArchitectPuzzle
 from puzzles.signal_breaker import SignalBreakerPuzzle
+from puzzles.nexus_gates import NexusGatesPuzzle
+from glitch_scene import GlitchScene
 
 
 
@@ -904,6 +906,9 @@ def main():
     active_puzzle_id = None
     running = True
 
+    glitch_scene = None
+    false_exit_timer = 0
+
     fireworks = []
     firework_timer = 0
 
@@ -996,6 +1001,7 @@ def main():
                         "final_override": FinalOverridePuzzle,
                         "logic_architect": LogicArchitectPuzzle,
                         "signal_breaker": SignalBreakerPuzzle,
+                        "nexus_gates": NexusGatesPuzzle,
                     }
 
                     puzzle_class = puzzle_classes.get(object_id)
@@ -1010,12 +1016,12 @@ def main():
                     game_state.open_puzzle(puzzle_class())
 
                 elif object_type == "door" and object_id == "exit":
-                    if progress.is_game_completed():
+                    if progress.is_completed("signal_breaker"):
                         game_state.change_mode(GameState.ENDING)
+                        false_exit_timer = 0
                     else:
                         game_state.set_status(
-                            f"The exit is locked. Solve all "
-                            f"{len(progress.puzzle_order)} puzzles first."
+                            "The exit is locked. Solve all six puzzles first."
                         )
 
                 continue
@@ -1052,24 +1058,31 @@ def main():
                         completed_id is not None
                         and progress.complete_puzzle(completed_id)
                     ):
-                        next_index = (
-                            progress.puzzle_order.index(completed_id) + 1
-                        )
-
-                        if next_index < len(progress.puzzle_order):
-                            next_name = (
-                                progress.puzzle_order[next_index]
-                                .replace("_", " ")
-                                .title()
-                            )
-                            game_state.set_status(
-                                f"{completed_id.replace('_', ' ').title()} "
-                                f"solved! {next_name} unlocked."
-                            )
-                        else:
+                        if completed_id == "signal_breaker":
                             game_state.set_status(
                                 "All six puzzles solved! The exit is unlocked."
                             )
+                        elif completed_id == "nexus_gates":
+                            game_state.close_puzzle()
+                            active_puzzle_id = None
+                            game_state.change_mode(GameState.ENDING)
+                            fireworks.clear()
+                            firework_timer = 0
+                            continue
+                        else:
+                            next_index = (
+                                progress.puzzle_order.index(completed_id) + 1
+                            )
+                            if next_index < len(progress.puzzle_order):
+                                next_name = (
+                                    progress.puzzle_order[next_index]
+                                    .replace("_", " ")
+                                    .title()
+                                )
+                                game_state.set_status(
+                                    f"{completed_id.replace('_', ' ').title()} "
+                                    f"solved! {next_name} unlocked."
+                                )
 
                     game_state.close_puzzle()
                     active_puzzle_id = None
@@ -1081,7 +1094,10 @@ def main():
                     event.type == pygame.KEYDOWN
                     and event.key in (pygame.K_RETURN, pygame.K_ESCAPE)
                 ):
-                    running = False
+                    if not progress.is_completed("nexus_gates"):
+                        glitch_scene = GlitchScene()
+                    else:
+                        running = False
 
         if game_state.current_mode == GameState.LABORATORY:
             player.handle_movement(
@@ -1090,7 +1106,7 @@ def main():
                 laboratory.get_obstacles(progress.completed_puzzles),
             )
 
-            if progress.is_game_completed():
+            if progress.is_completed("signal_breaker"):
                 exit_door = next(
                     (
                         door for door in laboratory.doors
@@ -1106,6 +1122,7 @@ def main():
                     game_state.change_mode(GameState.ENDING)
                     fireworks.clear()
                     firework_timer = 0
+                    false_exit_timer = 0
 
         if game_state.current_mode == GameState.TITLE:
             draw_title_screen(screen, title_font, normal_font)
@@ -1127,6 +1144,12 @@ def main():
             # Keep launching firework bursts throughout the celebration.
             firework_timer += 1
 
+            if not progress.is_completed("nexus_gates"):
+                false_exit_timer += 1
+                if false_exit_timer >= 150:
+                    glitch_scene = GlitchScene()
+                    false_exit_timer = 0
+
             if firework_timer >= 18:
                 create_firework(
                     fireworks,
@@ -1143,6 +1166,14 @@ def main():
                 normal_font,
                 fireworks,
             )
+
+        if glitch_scene is not None:
+            glitch_scene.update(dt)
+            glitch_scene.draw(screen)
+            if glitch_scene.is_done():
+                glitch_scene = None
+                active_puzzle_id = "nexus_gates"
+                game_state.open_puzzle(NexusGatesPuzzle())
 
         # Draw the notebook AFTER the current game scene so its translucent
         # overlay and page appear in every game mode, not only at the ending.
