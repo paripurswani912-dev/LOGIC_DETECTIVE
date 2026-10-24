@@ -5,3 +5,4 @@ venv/
 .env
 .pytest_cache/
 puzzles/final_override_circuits.zip
+de zip.zip
