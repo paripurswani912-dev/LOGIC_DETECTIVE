@@ -56,6 +56,35 @@ PAGE_LINE = (156, 163, 168)
 TEAL = (0, 91, 103)
 
 
+# ------------------------------------------------------------
+# BASIC MODE TEXT (Level One for players new to digital electronics)
+# ------------------------------------------------------------
+
+BASIC_LEVEL_ONE_NOTES = [
+    "Lab log: Entry 01 (beginner copy)",
+    "Everything in this lab is built from switches. A switch is either ON (1) or OFF (0). That is all a computer really knows.",
+    "A LOGIC GATE looks at switches and decides if its bulb is ON or OFF. NOT flips it. AND wants both ON. OR wants at least one ON. XOR wants them different.",
+    "Work through the 8 stages on the lock terminal. Every rule you learn is copied for you into TEST THE LOGIC > MY BASIC NOTES.",
+    "Stuck? Press H on the terminal. Press it again for a stronger hint, and a third time for the answer.",
+]
+
+BASIC_LEVEL_ONE_GOAL = (
+    "Learn what 0 and 1 mean, then learn the gates NOT, AND, OR and XOR well "
+    "enough to fix the lock."
+)
+
+BASIC_LEVEL_ONE_HINTS = [
+    "Start with the bulbs. A glowing bulb is 1 (ON). A dark bulb is 0 (OFF). Everything else is built on that.",
+    "Each gate has a one-line rule. AND: both ON. OR: at least one ON. XOR: inputs different. NOT: flips the input.",
+    "Stuck on a stage? Press H on the terminal. First press = a nudge, second = a stronger hint, third = the answer.",
+]
+
+BASIC_LEVEL_ONE_FINDINGS = [
+    "I learned that 0 means OFF and 1 means ON, and how NOT, AND, OR, XOR, NAND and NOR behave.",
+    "Recorded answer: AND truth table output 0001 (for inputs 00, 01, 10, 11).",
+]
+
+
 class DetectiveNotebook:
 
     LEVELS = [
@@ -311,6 +340,10 @@ class DetectiveNotebook:
             "KARNAUGH MAPS",
             "REGISTERS AND LFSRs",
         ]
+
+        # BASIC mode: stage notes are written here as the player finishes them.
+        self.basic_notes_by_stage = {}
+        self.game_mode = "intermediate"
 
         self.reference_notes = {
             # Plain-words glossary for players who are new to all of this.
@@ -731,6 +764,64 @@ class DetectiveNotebook:
     def set_level_unlocked(self, level_id, unlocked=True):
         if level_id in self.level_status:
             self.level_status[level_id]["unlocked"] = unlocked
+
+    # --------------------------------------------------------
+    # BASIC / INTERMEDIATE MODE
+    # --------------------------------------------------------
+
+    def set_mode(self, mode):
+        """Switch the scientist clues for Level One between the two paths.
+
+        The notebook, its labs and every other level stay common.
+        """
+        self.game_mode = mode
+        for name in ("SCIENTIST_NOTES", "LEVEL_GOALS", "LEVEL_HINTS",
+                     "DEFAULT_FINDINGS"):
+            self.__dict__.pop(name, None)          # back to the class defaults
+
+        if mode == "basic":
+            notes = dict(DetectiveNotebook.SCIENTIST_NOTES)
+            notes["level_one"] = list(BASIC_LEVEL_ONE_NOTES)
+            goals = dict(DetectiveNotebook.LEVEL_GOALS)
+            goals["level_one"] = BASIC_LEVEL_ONE_GOAL
+            hints = dict(DetectiveNotebook.LEVEL_HINTS)
+            hints["level_one"] = list(BASIC_LEVEL_ONE_HINTS)
+            findings = dict(DetectiveNotebook.DEFAULT_FINDINGS)
+            findings["level_one"] = list(BASIC_LEVEL_ONE_FINDINGS)
+            self.SCIENTIST_NOTES = notes
+            self.LEVEL_GOALS = goals
+            self.LEVEL_HINTS = hints
+            self.DEFAULT_FINDINGS = findings
+            self.enable_basic_notes()
+        else:
+            if "MY BASIC NOTES" in self.reference_topics:
+                self.reference_topics.remove("MY BASIC NOTES")
+
+    def enable_basic_notes(self):
+        """Show the MY BASIC NOTES page in TEST THE LOGIC."""
+        if "MY BASIC NOTES" not in self.reference_topics:
+            self.reference_topics.insert(0, "MY BASIC NOTES")
+        if "MY BASIC NOTES" not in self.reference_notes:
+            self._rebuild_basic_notes()
+
+    def add_basic_note(self, stage_id, lines):
+        """Auto-fill: called by the Basic puzzle when a stage is finished."""
+        self.enable_basic_notes()
+        self.basic_notes_by_stage[stage_id] = list(lines)
+        self._rebuild_basic_notes()
+
+    def _rebuild_basic_notes(self):
+        if not self.basic_notes_by_stage:
+            self.reference_notes["MY BASIC NOTES"] = [
+                "MY REVISION SHEET",
+                "- Finish a stage on the BASIC lock terminal and its notes are written here for you.",
+                "- Each stage adds the rule, the truth table, the symbol and the maths behind it.",
+            ]
+            return
+        notes = ["MY REVISION SHEET (AUTO-SAVED)"]
+        for stage_id in sorted(self.basic_notes_by_stage):
+            notes.extend(self.basic_notes_by_stage[stage_id])
+        self.reference_notes["MY BASIC NOTES"] = notes
 
     # --------------------------------------------------------
     # OPEN / CLOSE

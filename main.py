@@ -14,6 +14,7 @@ from interactions import InteractionManager
 from progress import ProgressManager
 
 from puzzles.logic_lock import LogicLockPuzzle
+from puzzles.basic_gates import BasicGatesPuzzle
 from puzzles.hidden_transmission import HiddenTransmissionPuzzle
 from puzzles.memory_protocol import MemoryProtocolPuzzle
 from puzzles.final_override import FinalOverridePuzzle
@@ -897,6 +898,53 @@ def update_fireworks(fireworks):
             fireworks.remove(particle)
 
 
+def mode_card_rects():
+    """Two clickable cards on the title screen: BASIC and INTERMEDIATE."""
+    width, height, gap = 255, 62, 14
+    total = width * 2 + gap
+    left = settings.SCREEN_WIDTH // 2 - total // 2
+    top = 436
+    return [
+        pygame.Rect(left, top, width, height),
+        pygame.Rect(left + width + gap, top, width, height),
+    ]
+
+
+def draw_mode_select(screen, choice):
+    """Draw the BASIC / INTERMEDIATE choice inside the title monitor."""
+    label_font = pygame.font.Font(None, 22)
+    head_font = pygame.font.Font(None, 30)
+    body_font = pygame.font.Font(None, 20)
+
+    label = label_font.render(
+        "CHOOSE YOUR PATH   [LEFT / RIGHT]  or click", True, (150, 175, 190)
+    )
+    screen.blit(
+        label,
+        label.get_rect(center=(settings.SCREEN_WIDTH // 2, 422)),
+    )
+
+    cards = [
+        ("BASIC", "New to digital electronics?", "Start from 0 and 1"),
+        ("INTERMEDIATE", "Know gates and truth tables?", "Jump into the puzzles"),
+    ]
+    for index, (rect, (name, line1, line2)) in enumerate(
+        zip(mode_card_rects(), cards)
+    ):
+        selected = index == choice
+        fill = (14, 58, 40) if selected else (14, 26, 38)
+        edge = settings.GREEN if selected else (80, 100, 118)
+        pygame.draw.rect(screen, fill, rect, border_radius=8)
+        pygame.draw.rect(screen, edge, rect, 3 if selected else 2, border_radius=8)
+
+        title = head_font.render(name, True, settings.GREEN if selected else settings.WHITE)
+        screen.blit(title, title.get_rect(midtop=(rect.centerx, rect.y + 5)))
+        t1 = body_font.render(line1, True, (205, 218, 226))
+        screen.blit(t1, t1.get_rect(midtop=(rect.centerx, rect.y + 29)))
+        t2 = body_font.render(line2, True, (150, 175, 190))
+        screen.blit(t2, t2.get_rect(midtop=(rect.centerx, rect.y + 45)))
+
+
 def main():
     pygame.init()
     notebook = DetectiveNotebook()
@@ -924,6 +972,11 @@ def main():
 
     active_puzzle_id = None
     running = True
+
+    # Title-screen path: 0 = BASIC, 1 = INTERMEDIATE.
+    game_mode = "intermediate"
+    mode_choice = 1
+    basic_session = None      # keeps Basic Level 1 progress if the player leaves
 
     glitch_scene = None
     false_exit_timer = 0
@@ -959,14 +1012,40 @@ def main():
             mode = game_state.current_mode
 
             if mode == GameState.TITLE:
-                if (
-                    event.type == pygame.KEYDOWN
-                    and event.key == pygame.K_RETURN
+                start_game = False
+
+                if event.type == pygame.KEYDOWN:
+                    if event.key in (pygame.K_LEFT, pygame.K_a, pygame.K_b):
+                        mode_choice = 0
+                    elif event.key in (pygame.K_RIGHT, pygame.K_d, pygame.K_i):
+                        mode_choice = 1
+                    elif event.key in (pygame.K_UP, pygame.K_DOWN):
+                        mode_choice = 1 - mode_choice
+                    elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                        start_game = True
+                elif (
+                    event.type == pygame.MOUSEBUTTONDOWN
+                    and event.button == 1
                 ):
+                    for index, rect in enumerate(mode_card_rects()):
+                        if rect.collidepoint(event.pos):
+                            # First click selects, clicking the chosen card starts.
+                            start_game = index == mode_choice
+                            mode_choice = index
+
+                if start_game:
+                    game_mode = "basic" if mode_choice == 0 else "intermediate"
+                    notebook.set_mode(game_mode)
                     game_state.change_mode(GameState.LABORATORY)
-                    game_state.set_status(
-                        "Explore the laboratory. Find the first terminal."
-                    )
+                    if game_mode == "basic":
+                        game_state.set_status(
+                            "BASIC path: find the first terminal. "
+                            "It teaches logic gates from zero."
+                        )
+                    else:
+                        game_state.set_status(
+                            "Explore the laboratory. Find the first terminal."
+                        )
                 continue
 
             if mode == GameState.LABORATORY:
@@ -1032,7 +1111,14 @@ def main():
                         continue
 
                     active_puzzle_id = object_id
-                    game_state.open_puzzle(puzzle_class())
+
+                    if object_id == "logic_lock" and game_mode == "basic":
+                        # Beginner path: the same terminal opens Basic Level 1.
+                        if basic_session is None:
+                            basic_session = BasicGatesPuzzle(notebook=notebook)
+                        game_state.open_puzzle(basic_session)
+                    else:
+                        game_state.open_puzzle(puzzle_class())
 
                 elif object_type == "door" and object_id == "exit":
                     if progress.is_completed("signal_breaker"):
@@ -1159,6 +1245,7 @@ def main():
 
         if game_state.current_mode == GameState.TITLE:
             draw_title_screen(screen, title_font, normal_font)
+            draw_mode_select(screen, mode_choice)
         elif game_state.current_mode == GameState.LABORATORY:
             draw_laboratory_screen(
                 screen,
