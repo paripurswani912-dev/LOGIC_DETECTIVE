@@ -1,4 +1,4 @@
-"""End-to-end: title screen -> BASIC -> Logic Architect terminal -> all 8 Karnaugh stages
+"""End-to-end: title screen -> BASIC -> terminal 4 (Final Override) -> all 8 Karnaugh stages
 through the real main() loop. (The terminal is force-unlocked; walking and earlier
 levels are not under test.)   Run:  python tests/test_basic_kmap_in_main.py"""
 import os, sys
@@ -15,6 +15,7 @@ from test_basic_kmap import key, click
 SHOTS = os.path.join(ROOT, "tests", "kmap_shots"); os.makedirs(SHOTS, exist_ok=True)
 captured = {}
 flow = {"finished": False}
+import notebook as _nbmod
 
 _init = basic_kmap.BasicKarnaughPuzzle.__init__
 def _wrapped(self, *a, **k):
@@ -23,7 +24,7 @@ basic_kmap.BasicKarnaughPuzzle.__init__ = _wrapped
 
 def _near(self, player, objects, completed_puzzles=None):
     for o in objects:
-        if o.get("puzzle_id") == "logic_architect":
+        if o.get("puzzle_id") == "final_override":
             self.nearby_object = o; return o
     self.nearby_object = None
 interactions.InteractionManager.find_nearby_object = _near
@@ -71,11 +72,11 @@ def script():
     yield []
     yield [key(pygame.K_LEFT)]                 # BASIC
     yield [key(pygame.K_RETURN)]               # start
-    yield [key(pygame.K_e)]                    # open Logic Architect terminal
+    yield [key(pygame.K_e)]                    # open terminal 4 (Final Override)
     yield []
     puz = captured["puz"]
     assert type(puz).__name__ == "BasicKarnaughPuzzle", "BASIC path must open the Karnaugh course"
-    for stage in range(8):
+    for stage in range(len(puz.stages)):
         for _ in range(len(puz.stage["steps"])):
             yield step_events(puz) + [key(pygame.K_RETURN)]
         assert puz.phase == "done", stage

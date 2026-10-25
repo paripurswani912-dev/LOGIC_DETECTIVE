@@ -15,7 +15,7 @@ import pygame  # noqa: E402
 import settings  # noqa: E402
 from notebook import DetectiveNotebook  # noqa: E402
 from puzzles.basic_kmap import (  # noqa: E402
-    BasicKarnaughPuzzle, analyse, build_kmap_stages, check_loops, cell_minterm,
+    BasicKarnaughPuzzle, cell_name, analyse, build_kmap_stages, check_loops, cell_minterm,
     expr_str, illegal_reason, minterm_cell, prime_loops, sets_for, solution_loops,
     term_str, vals_from, cube_cells, col_codes, row_codes,
 )
@@ -56,7 +56,13 @@ def test_engine():
     assert analyse({0, 2, 4, 6}, 3)["cube"]                  # wraps left-right
 
     # reading terms
+    assert term_str({0}, 3) == "A'B'C'" and term_str({0, 1}, 3) == "A'B'"
+    assert term_str({0, 1, 2, 3}, 3) == "A'"           # stage 4 demo captions
     assert term_str({4, 5}, 3) == "AB'"
+    # minterm / maxterm facts used in stages 3 and 8
+    assert cell_name(3, 3) == "A'BC" and cell_name(6, 3) == "ABC'"
+    assert term_str({5}, 3, "pos") == "(A' + B + C')" and term_str({1}, 3, "pos") == "(A + B + C')"
+    assert term_str({0, 1}, 3, "pos") == "(A + B)"
     assert term_str({0, 2, 8, 10}, 4) == "B'D'"
     assert term_str({0, 1}, 3, "pos") == "(A + B)"
     assert term_str({5, 7, 13, 15}, 4, "pos") == "(B' + D')"
@@ -98,7 +104,7 @@ def test_engine():
 # ------------------------------------------------------------------
 def test_content():
     stages = build_kmap_stages()
-    assert len(stages) == 8
+    assert len(stages) == 9
     for stage in stages:
         assert stage["steps"] and stage["brief"] and stage["items"] and stage["example"]
         n, vals, loops = stage["example"]
@@ -124,7 +130,7 @@ def test_content():
                 assert step["correct"] in values
                 assert len(set(values)) == len(values)
                 # legal/illegal verdicts must match the engine
-                if stage["id"] == "k3_legal":
+                if stage["id"] == "k4_legal":
                     loop = frozenset(step["khl"])
                     allowed = {m for m, v in vals.items() if v == 1}
                     reason = illegal_reason(loop, n, allowed)
@@ -134,8 +140,8 @@ def test_content():
                                "shape" if not analyse(loop, n)["cube"] else "zero")
                     assert verdict == step["correct"], (step["q"], verdict, step["correct"])
                 # expression answers must equal what the loops read as
-                if stage["id"] in ("k6_sop", "k7_pos") and step["kloops"]:
-                    mode = "sop" if stage["id"] == "k6_sop" else "pos"
+                if stage["id"] in ("k7_sop", "k8_pos") and step["kloops"]:
+                    mode = "sop" if stage["id"] == "k7_sop" else "pos"
                     loops = [l for l, _i in step["kloops"]]
                     assert step["correct"] == expr_str(loops, n, mode), stage["id"]
                     if mode == "sop":
@@ -253,7 +259,7 @@ def test_playthrough(screen):
     puz._enter_step()
 
     seen_kinds = set()
-    for si in range(8):
+    for si in range(len(puz.stages)):
         assert puz.stage_i == si
         for ti in range(len(puz.stage["steps"])):
             assert puz.phase == "play"
@@ -271,15 +277,16 @@ def test_playthrough(screen):
     assert {"kinspect", "kfill", "kpick", "kloops", "kstretch", "kterm", "kdemo", "choice"} <= seen_kinds
 
     text = "\n".join(nb.reference_notes["MY BASIC NOTES"])
-    for needle in ("KARNAUGH 1: NEIGHBOURS", "KARNAUGH 3: LEGAL LOOPS", "KARNAUGH 7: POS",
-                   "KARNAUGH 8: DON'T CARES", "segment e lights for 0, 2, 6, 8"):
+    for needle in ("KARNAUGH 1: NEIGHBOURS", "KARNAUGH 3: MINTERMS", "KARNAUGH 4: LEGAL LOOPS",
+                   "KARNAUGH 8: POS (LOOP THE ZEROS)", "MAXTERM", "KARNAUGH 9: DON'T CARES",
+                   "segment e lights for 0, 2, 6, 8"):
         assert needle in text, needle
 
     nb.toggle()
     nb._open_topic("MY BASIC NOTES")
     nb.draw(screen)
     pygame.image.save(screen, os.path.join(SHOTS, "notebook_kmap_notes.png"))
-    print("  playthrough OK (8 stages, every step kind, notebook autofilled)")
+    print("  playthrough OK (9 stages, every step kind, notebook autofilled)")
 
 
 def test_notebook_order_and_text():
@@ -289,9 +296,17 @@ def test_notebook_order_and_text():
     nb.add_basic_note("s3_not", ["STAGE 3: NOT GATE"])
     notes = nb.reference_notes["MY BASIC NOTES"]
     assert notes.index("STAGE 3: NOT GATE") < notes.index("KARNAUGH 1: X"), "gates before K-maps"
-    assert "K-MAP" in nb.SCIENTIST_NOTES["level_five"][1].upper()
+    # BASIC path: K-maps live on terminal 4 (level_four); terminal 5 keeps its original text
+    assert "K-MAP" in " ".join(nb.SCIENTIST_NOTES["level_four"]).upper()
+    assert nb.LEVEL_PRACTICE["level_four"] == "KARNAUGH MAPS"
+    assert "Karnaugh" not in nb.LEVEL_GOALS["level_four"] or "Karnaugh" in nb.LEVEL_GOALS["level_four"]
+    assert nb.SCIENTIST_NOTES["level_five"] == DetectiveNotebook.SCIENTIST_NOTES["level_five"]
+    assert nb.LEVEL_GOALS["level_five"] == DetectiveNotebook.LEVEL_GOALS["level_five"]
     nb.set_mode("intermediate")
-    assert "K-MAP" not in nb.SCIENTIST_NOTES["level_five"][1].upper()
+    # INTERMEDIATE is untouched
+    for name in ("SCIENTIST_NOTES", "LEVEL_GOALS", "LEVEL_HINTS", "DEFAULT_FINDINGS", "LEVEL_PRACTICE"):
+        assert getattr(nb, name) == getattr(DetectiveNotebook, name), name
+    assert nb.LEVEL_PRACTICE["level_four"] == "BOOLEAN ALGEBRA"
     assert "MY BASIC NOTES" not in nb.reference_topics
     print("  notebook order + per-mode text OK")
 

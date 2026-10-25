@@ -1,18 +1,19 @@
 # puzzles/basic_kmap.py
-# BASIC KARNAUGH MAPS - "Shrink a formula with a picture"
+# BASIC KARNAUGH MAPS - "Shrink a formula with a picture" (9 stages)
 #
-# Plugs into the Logic Architect terminal (notebook level_five) on the BASIC path.
+# Plugs into terminal 4 (puzzle_id final_override, notebook level_four) on the BASIC path.
 # It reuses the frame, hints, notebook autofill and answer buttons of
 # puzzles/basic_gates.py, and adds a small K-map engine.
 #
 #   1  Neighbours          a K-map is a truth table where neighbours differ in ONE variable
 #   2  Fill the map        truth table -> map (2, 3 and 4 variables), reading Gray-code labels
-#   3  Legal or illegal?   the grouping rules: size, shape, contents
-#   4  Stretch the loop    why 4 and not 8: keep doubling until a 0 blocks you
-#   5  Wrap-around         edges touch, the four corners are one loop
-#   6  Loop -> term -> SOP read a loop as a product term, OR the terms together
-#   7  POS                 loop the 0s, read sums, AND them (De Morgan link)
-#   8  Don't cares + boss  X = wildcard, then 7-segment display segment "e"
+#   3  Minterms           every cell has a number and a name (m0, m1 ...)
+#   4  Legal or illegal?   the grouping rules: size, shape, contents
+#   5  Stretch the loop    why 4 and not 8: keep doubling until a 0 blocks you
+#   6  Wrap-around         edges touch, the four corners are one loop
+#   7  Loop -> term -> SOP read a loop as a product term, OR the terms together
+#   8  POS + maxterms      loop the 0s, read sums, AND them (De Morgan link)
+#   9  Don't cares + boss  X = wildcard, then 7-segment display segment "e"
 #
 # The big idea taught everywhere: neighbouring cells differ in exactly one
 # variable, so when both are 1 that variable cancels (A + A' = 1).
@@ -443,7 +444,7 @@ def _judge(n, ones, loop, verdict, why, hints_extra):
 
 def _stage_legal():
     return {
-        "id": "k3_legal", "title": "Legal or illegal?", "sub": "the grouping rules",
+        "id": "k4_legal", "title": "Legal or illegal?", "sub": "the grouping rules",
         "brief": [
             "A loop is legal only if it passes THREE checks.",
             "SIZE: 1, 2, 4 or 8 cells (powers of 2). SHAPE: a rectangle, wrapping round edges allowed. "
@@ -511,7 +512,7 @@ def _frames_stretch():
 def _stage_stretch():
     demo_vals = vals_from(3, {0, 1, 2, 3, 4})
     return {
-        "id": "k4_stretch", "title": "Stretch the loop", "sub": "why 4 and not 8?",
+        "id": "k5_stretch", "title": "Stretch the loop", "sub": "why 4 and not 8?",
         "brief": [
             "Why loop at all? A bigger loop gives a SHORTER formula. "
             "So we start at one cell and DOUBLE the loop: 1, 2, 4, 8 cells.",
@@ -538,6 +539,92 @@ def _stage_stretch():
             ("WHY 4 NOT 8", "Doubling again would pull in a 0 cell, which is illegal."),
             ("WHY BIGGER IS BETTER", "Every doubling removes one letter from the formula."),
             ("MATH LINK", "A loop of 2^k cells on an n-variable map gives a term with n - k letters."),
+        ],
+    }
+
+
+def _minterm_fill_step(n, ones):
+    step = _fill_step(n, ones)
+    step["line"] = "F = " + " + ".join(f"m{m}" for m in sorted(ones))
+    step["task"] = "Each m-number is a cell number. Click every cell in the list."
+    step["hints"] = [
+        "m3 means the cell numbered 3. Write 3 in binary (011), then find that address on the map.",
+        "Use the place values 4, 2, 1 for three letters. For example 6 = 4 + 2 = 110.",
+        step["hints"][2],
+    ]
+    return step
+
+
+def _stage_minterms():
+    demo_vals = vals_from(3, {1, 3, 7})
+    demo = [
+        {"cells": {3}, "nums": True,
+         "caption": "Every cell has a NUMBER: its address read as a binary number. "
+                    "Cell 011 is number 3 (0 + 2 + 1)."},
+        {"cells": {3}, "marks": {3: "m3"},
+         "caption": "A cell's full NAME is the AND of ALL the letters, with a bar on every letter that is 0. "
+                    "Cell 011 is A'BC. This one-cell product is called a MINTERM: m3."},
+        {"cells": {1, 3, 7}, "marks": {1: "m1", 3: "m3", 7: "m7"},
+         "caption": "F is 1 on three cells, so F = m1 + m3 + m7. "
+                    "Short form: F = Sum m(1, 3, 7)."},
+        {"cells": set(), "nums": True,
+         "caption": "A minterm is 1 for exactly ONE input row. A 3-letter map has 2^3 = 8 cells, "
+                    "so 8 minterms: m0 to m7."},
+    ]
+    q_cell = _kmap_choice(
+        3, vals_from(3, {5}), [],
+        "The highlighted cell has the address ABC = 101. Which minterm is it?",
+        "m5", [("m3", "m3"), ("m5", "m5"), ("m6", "m6"), ("m7", "m7")],
+        "Read the address as a binary number.",
+        "101 = 4 + 0 + 1 = 5, so this cell is m5.",
+        ["Read the address 101 as a binary number.",
+         "Place values for three letters are 4, 2, 1. So 101 = 4 + 0 + 1.",
+         "The answer is m5."],
+        highlight={5})
+    q_name = {
+        "kind": "choice", "visual": "none",
+        "q": "Which product is minterm m6 of the letters A, B, C?",
+        "options": [("AB'C'", "a"), ("ABC'", "b"), ("A'BC", "c"), ("ABC", "d")],
+        "correct": "b", "task": "Turn 6 into 3 bits, then write the letters.",
+        "ok": "6 = 110, so A = 1, B = 1, C = 0 gives ABC'.",
+        "hints": ["First write 6 in binary with 3 bits.",
+                  "6 = 110, so A = 1, B = 1, C = 0. A 1 stays plain and a 0 gets a bar.",
+                  "The answer is ABC'."],
+    }
+    q_count = {
+        "kind": "choice", "visual": "none",
+        "q": "How many minterms does a 4-letter map (A, B, C, D) have?",
+        "options": [("8", "8"), ("12", "12"), ("16", "16"), ("32", "32")],
+        "correct": "16", "task": "There is one minterm for every cell.",
+        "ok": "4 letters give 2^4 = 16 cells, so 16 minterms (m0 to m15).",
+        "hints": ["There is one minterm for every cell of the map.",
+                  "A 4-letter map is 4 cells wide and 4 cells tall.",
+                  "The answer is 16, because 2^4 = 16."],
+    }
+    return {
+        "id": "k3_minterms", "title": "Minterms", "sub": "the name of a cell",
+        "brief": [
+            "Every cell on the map has a number and a full name. The full name is called a MINTERM.",
+            "You need this word to read maps later. A minterm is just one cell written as an AND "
+            "of all the letters.",
+        ],
+        "steps": [
+            {"kind": "kdemo", "n": 3, "vals": demo_vals, "frames": demo,
+             "task": "Watch all four views (LEFT / RIGHT), then press ENTER.",
+             "hints": ["Use LEFT and RIGHT to move between the views.",
+                       "Look at all four views, then press ENTER.",
+                       "Press RIGHT until all four dots are lit, then ENTER."]},
+            q_cell, q_name,
+            _minterm_fill_step(3, {0, 3, 5, 6}),
+            q_count,
+        ],
+        "example": (3, vals_from(3, {0, 3, 5, 6}), []),
+        "items": [
+            ("MINTERM", "The AND of ALL the letters for one cell, with a bar on each letter that is 0. "
+                        "Cell 011 = A'BC = m3."),
+            ("CELL NUMBER", "Read the address as binary: 101 = 4 + 0 + 1 = 5, so it is m5."),
+            ("SHORT FORM", "F = m1 + m3 + m7 is written F = Sum m(1, 3, 7)."),
+            ("MATH LINK", "n letters give 2^n cells, so 2^n minterms (4 letters: 16)."),
         ],
     }
 
@@ -569,7 +656,7 @@ LOOP_HINTS = [
 
 def _stage_wrap():
     return {
-        "id": "k5_wrap", "title": "Wrap-around", "sub": "edges touch, corners join",
+        "id": "k6_wrap", "title": "Wrap-around", "sub": "edges touch, corners join",
         "brief": [
             "The map has no real edges. The left side touches the right side, "
             "and the top touches the bottom.",
@@ -627,7 +714,7 @@ def _stage_sop():
         "For each loop: a variable that changes is dropped, one stuck at 1 is written plain, one stuck at 0 gets a bar.",
     ]
     return {
-        "id": "k6_sop", "title": "Loop to term to SOP", "sub": "reading the loops",
+        "id": "k7_sop", "title": "Loop to term to SOP", "sub": "reading the loops",
         "brief": [
             "Read each loop with three questions per variable: stays 1, stays 0, or changes?",
             "Stays 1: write the letter. Stays 0: write it with a bar. Changes: drop it. "
@@ -657,35 +744,66 @@ def _stage_sop():
 
 def _stage_pos():
     f_vals = vals_from(3, {2, 3, 4, 5, 6, 7})
-    zero_loops = [(frozenset({0, 1}), 0)]
+    zero_loop = [(frozenset({0, 1}), 0)]
     demo = [
         {"cells": {2, 3, 4, 5, 6, 7}, "loops": [(frozenset({2, 3, 6, 7}), 0), (frozenset({4, 5, 6, 7}), 1)],
          "caption": "SOP: loop the 1s. The loops give B and A, so F = A + B."},
-        {"cells": {0, 1}, "loops": zero_loops,
-         "caption": "POS: loop the 0s instead. This loop is A'B' (this is F', the opposite of F)."},
-        {"cells": {0, 1}, "loops": zero_loops,
-         "caption": "De Morgan flips it back: F = (A'B')' = A + B. So read a 0-loop as a SUM: "
-                    "stays 0 = plain letter, stays 1 = barred letter."},
-        {"cells": set(), "caption": "Same answer both ways: A + B. POS is handy when the 0s are fewer "
-                                    "or form bigger loops. Join the sums with AND."},
+        {"cells": {0}, "marks": {0: "M0"},
+         "caption": "POS: look at the 0s instead. A 0 cell has a MAXTERM: the OR of ALL the letters. "
+                    "Cell 000 gives (A + B + C). Name: M0."},
+        {"cells": {0, 1}, "marks": {0: "M0", 1: "M1"},
+         "caption": "Rule: a letter that is 0 stays plain, a letter that is 1 gets a bar. "
+                    "Cell 001 gives (A + B + C') = M1. A minterm is the opposite: there 1 stays plain."},
+        {"cells": {0, 1}, "loops": zero_loop,
+         "caption": "Neighbouring 0s merge just like 1s: (A + B + C)(A + B + C') = (A + B). "
+                    "C changes, so C cancels."},
+        {"cells": {0, 1}, "loops": zero_loop,
+         "caption": "So read a 0-loop as a SUM: stays 0 = plain letter, stays 1 = barred letter. "
+                    "(De Morgan flips the loop A'B' of F' into A + B.)"},
+        {"cells": set(),
+         "caption": "Same answer both ways: A + B. Short forms: F = Sum m(2, 3, 4, 5, 6, 7) and "
+                    "F = Prod M(0, 1). Join the sums with AND. POS is handy when the 0s are fewer."},
     ]
     pos_vals = vals_from(3, {2, 3, 4, 6, 7})
     zloops = [frozenset({0, 1}), frozenset({1, 5})]
     opts_p, ans_p = _expr_options(3, zloops, "pos", 21)
     cmp_vals = vals_from(3, {1, 2, 4, 5, 6, 7})
+    assert term_str({5}, 3, "pos") == "(A' + B + C')"
+    max_opts = [("(A' + B + C')", "ok"), ("(A + B' + C)", "w1"), ("AB'C", "w2"), ("(A' + B' + C')", "w3")]
+    random.Random(5).shuffle(max_opts)
+    q_max = _kmap_choice(
+        3, pos_vals, [], "The highlighted cell is a 0 (ABC = 101). What is its maxterm?",
+        "ok", max_opts, "Write the OR of all the letters for this 0 cell.",
+        "101: A = 1 gets a bar, B = 0 stays plain, C = 1 gets a bar: (A' + B + C') = M5.",
+        ["A maxterm is a SUM (OR) of all the letters. A letter that is 0 stays plain, a 1 gets a bar.",
+         "ABC = 101: A is 1 (bar), B is 0 (plain), C is 1 (bar).",
+         "The answer is (A' + B + C')."],
+        highlight={5})
+    q_prod = {
+        "kind": "choice", "visual": "none",
+        "q": "F = Prod M(0, 1, 5). On which cells is F equal to 0?",
+        "options": [("0, 1 and 5", "z"), ("2, 3, 4, 6, 7", "o"), ("Only cell 5", "c"), ("All 8 cells", "a")],
+        "correct": "z", "task": "Prod M lists the zeros.",
+        "ok": "Each M is a cell where F is 0. Sum m lists the 1s, Prod M lists the 0s.",
+        "hints": ["Each M in the list is a cell where F is 0.",
+                  "Sum m lists the cells where F = 1. Prod M lists the cells where F = 0.",
+                  "F is 0 on cells 0, 1 and 5."],
+    }
     return {
-        "id": "k7_pos", "title": "POS", "sub": "loop the zeros",
+        "id": "k8_pos", "title": "POS", "sub": "loop the zeros",
         "brief": [
-            "POS means product of sums. You loop the 0s instead of the 1s.",
+            "POS means product of sums. Loop the 0s instead of the 1s. "
+            "Every 0 cell has a MAXTERM: an OR of all the letters.",
             "Why it works: the 0-loops give F' (the opposite). De Morgan's theorem flips them back "
             "into sums that you AND together.",
         ],
         "steps": [
             {"kind": "kdemo", "n": 3, "vals": f_vals, "frames": demo,
-             "task": "Watch all four views (LEFT / RIGHT), then press ENTER.",
+             "task": "Watch all six views (LEFT / RIGHT), then press ENTER.",
              "hints": ["Use LEFT and RIGHT to move between the views.",
-                       "Look at all four views, then press ENTER.",
-                       "Press RIGHT until all four dots are lit, then ENTER."]},
+                       "Look at every view, then press ENTER.",
+                       "Press RIGHT until all six dots are lit, then ENTER."]},
+            q_max, q_prod,
             _term_step(3, {0, 1}, "pos", vals_from(3, {2, 3, 4, 5, 6, 7}),
                        "Read this 0-loop as a SUM: stays 0 = letter, stays 1 = letter with a bar, changes = drop."),
             _term_step(4, {5, 7, 13, 15}, "pos", vals_from(4, set(range(16)) - {5, 7, 13, 15}),
@@ -711,11 +829,13 @@ def _stage_pos():
         ],
         "example": (3, pos_vals, zloops),
         "items": [
-            ("RECIPE", "Loop the 0s. Per variable: stays 0 = letter, stays 1 = letter with a bar, changes = dropped."),
-            ("POS", "OR the letters inside a loop (a sum), then AND the sums together."),
-            ("WHY (DE MORGAN)", "The 0-loops give F'. Taking the opposite with De Morgan turns products "
-                                "into sums and flips every bar."),
-            ("EXAMPLE", "Here F = " + ans_p + "."),
+            ("RECIPE", "Loop the 0s. Stays 0 = letter, stays 1 = letter with a bar, changes = dropped. "
+                       "OR the letters in a loop, AND the loops."),
+            ("MAXTERM", "The OR of ALL letters for one 0 cell: a 0 stays plain, a 1 gets a bar. "
+                        "Cell 001 = (A + B + C') = M1."),
+            ("SHORT FORM", "F = Prod M(0, 1, 5) lists the cells where F = 0. Sum m lists the 1s."),
+            ("WHY (DE MORGAN)", "The 0-loops give F'. De Morgan turns that into sums and flips every bar. "
+                                "Here F = " + ans_p + "."),
         ],
     }
 
@@ -738,7 +858,7 @@ def _stage_dc():
     seg_opts = [("B'D' + CD'", "ok"), ("B'D' + CD", "w1"), ("BD' + C'D'", "w2"), ("B'D + CD'", "w3")]
     assert seg_expr == "B'D' + CD'", seg_expr
     return {
-        "id": "k8_dc", "title": "Don't cares + boss", "sub": "X cells and the 7-segment display",
+        "id": "k9_dc", "title": "Don't cares + boss", "sub": "X cells and the 7-segment display",
         "brief": [
             "X means DON'T CARE: that input can never happen, so it may count as 0 or 1.",
             "Use an X as a 1 only when it makes a loop bigger. Boss: simplify one segment of a "
@@ -791,8 +911,8 @@ def _stage_dc():
 
 
 def build_kmap_stages():
-    return [_stage_neighbours(), _stage_fill(), _stage_legal(), _stage_stretch(),
-            _stage_wrap(), _stage_sop(), _stage_pos(), _stage_dc()]
+    return [_stage_neighbours(), _stage_fill(), _stage_minterms(), _stage_legal(),
+            _stage_stretch(), _stage_wrap(), _stage_sop(), _stage_pos(), _stage_dc()]
 
 
 # ------------------------------------------------------------------
@@ -831,7 +951,7 @@ def draw_kmap(screen, fonts, origin, cell, n, vals=None, selected=(), loops=(),
             pygame.draw.rect(screen, fill, rect)
             pygame.draw.rect(screen, (70, 96, 116), rect, 1)
             v = None if vals is None else vals.get(m)
-            if v is not None:
+            if v is not None and not (marks and m in marks):
                 txt, col = {0: ("0", (120, 136, 150)), 1: ("1", GREEN), X: ("X", YELLOW)}[v]
                 img = f_body.render(txt, True, col)
                 screen.blit(img, img.get_rect(center=rect.center))
@@ -1441,7 +1561,8 @@ class BasicKarnaughPuzzle(BasicGatesPuzzle):
         loops = [(l, i) for l, i in frame.get("loops", [])]
         rects, origin, cell = self._map(screen, n, vals=step["vals"],
                                         highlight=frame.get("cells", ()), loops=loops,
-                                        bad=frame.get("bad", ()))
+                                        bad=frame.get("bad", ()), nums=frame.get("nums", False),
+                                        marks=frame.get("marks"))
         wrap = frame.get("wrap")
         cols = len(col_codes(n))
         rows = len(row_codes(n))
@@ -1539,39 +1660,49 @@ class BasicKarnaughPuzzle(BasicGatesPuzzle):
                 "- A cell's address is its row bits then its column bits (ABC = row A, column BC).",
                 "- Read the labels: column 11 comes BEFORE column 10. Never count cells.",
             ],
-            "k3_legal": [
-                "KARNAUGH 3: LEGAL LOOPS",
+            "k3_minterms": [
+                "KARNAUGH 3: MINTERMS",
+                "- Every cell has an address. Read it as a binary number: 101 = 4 + 0 + 1 = 5, so it is cell 5.",
+                "- A MINTERM is the AND of ALL the letters for one cell, with a bar on every letter that is 0. Cell 011 = A'BC = m3.",
+                "- F = m1 + m3 + m7 means F is 1 on cells 1, 3 and 7. Short form: F = Sum m(1, 3, 7).",
+                "- n letters give 2^n cells and 2^n minterms (4 letters: 16).",
+            ],
+            "k4_legal": [
+                "KARNAUGH 4: LEGAL LOOPS",
                 "- SIZE: a loop has 1, 2, 4, 8 (or 16) cells. Never 3, 5, 6 or 7.",
                 "- SHAPE: a rectangle, which may wrap round an edge. No diagonals, no L-shapes.",
                 "- CONTENTS: only 1s (and X's). One 0 inside makes the loop illegal.",
             ],
-            "k4_stretch": [
-                "KARNAUGH 4: BIGGEST LOOPS",
-                "- Make every loop as big as possible: keep doubling 1, 2, 4, 8 until the next cell is a 0.",
+            "k5_stretch": [
+                "KARNAUGH 5: BIGGEST LOOPS",
+                "- Start at one cell and DOUBLE the loop (1, 2, 4, 8) until the next doubling would swallow a 0.",
                 "- Why 4 and not 8? Doubling again would pull in a 0 cell.",
+                "- Every doubling removes one letter, so a bigger loop gives a shorter formula.",
                 "- Math: a loop of 2^k cells on an n-variable map gives a term with n - k variables.",
             ],
-            "k5_wrap": [
-                "KARNAUGH 5: WRAP-AROUND",
+            "k6_wrap": [
+                "KARNAUGH 6: WRAP-AROUND",
                 "- The map wraps: left touches right, top touches bottom.",
                 "- The 4 corners of a 4-variable map form ONE loop of 4: B'D'.",
                 "- Cover every 1 with the FEWEST, BIGGEST loops. Loops may overlap.",
             ],
-            "k6_sop": [
-                "KARNAUGH 6: READING LOOPS (SOP)",
+            "k7_sop": [
+                "KARNAUGH 7: READING LOOPS (SOP)",
                 "- Per variable: stays 1 = write the letter. Stays 0 = letter with a bar. Changes = drop it.",
                 "- AND the letters in one loop (a product term), then OR the terms: SOP = sum of products.",
                 "- Example: loop of cells 100 and 101 gives AB' (C changes, so C is dropped).",
             ],
-            "k7_pos": [
-                "KARNAUGH 7: POS (LOOP THE 0s)",
+            "k8_pos": [
+                "KARNAUGH 8: POS (LOOP THE ZEROS)",
                 "- Loop the 0s. Read each loop as a SUM: stays 0 = letter, stays 1 = letter with a bar, changes = drop.",
                 "- AND the sums together: POS = product of sums. Example: F = (A + B)(B + C').",
+                "- MAXTERM: the OR of ALL the letters for one 0 cell. A 0 stays plain, a 1 gets a bar. Cell 001 = (A + B + C') = M1.",
+                "- A maxterm is the opposite of a minterm: M1 = (m1)'. F = Prod M(0, 1, 5) lists the cells where F = 0.",
                 "- Why: the 0-loops give F'. De Morgan turns that into sums and flips every bar.",
                 "- Use POS when the 0s are fewer or give bigger loops than the 1s.",
             ],
-            "k8_dc": [
-                "KARNAUGH 8: DON'T CARES AND 7-SEGMENT",
+            "k9_dc": [
+                "KARNAUGH 9: DON'T CARES AND 7-SEGMENT",
                 "- X = don't care (that input never happens). Count it as 1 ONLY if it makes a loop bigger.",
                 "- You do NOT have to cover every X. Never make a loop that holds only X's.",
                 "- BCD uses 0 to 9, so inputs 10 to 15 are all X.",

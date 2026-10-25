@@ -85,26 +85,26 @@ BASIC_LEVEL_ONE_FINDINGS = [
 ]
 
 
-BASIC_LEVEL_FIVE_NOTES = [
-    "Lab log: Entry 05 (beginner copy)",
-    "The vault alarm formula is long and messy. A KARNAUGH MAP (K-map) shrinks it with a picture instead of algebra.",
+BASIC_LEVEL_FOUR_NOTES = [
+    "Lab log: Entry 04 (beginner copy)",
+    "The override formula is long and messy. A KARNAUGH MAP (K-map) shrinks it with a picture instead of algebra.",
     "A K-map is a truth table drawn as a grid. Its rows and columns use GRAY CODE (00, 01, 11, 10) so that touching cells differ in only ONE variable. Two touching 1s merge and that variable disappears.",
     "Draw LOOPS round neighbouring 1s: a rectangle of 1, 2, 4 or 8 cells, as big as possible. The map wraps round its edges, so the four corners are one loop.",
     "Read each loop as a short term. Add the terms for SOP, or loop the 0s and multiply sums for POS. X cells (don't cares) can help make loops bigger. Your notes are saved in MY BASIC NOTES.",
 ]
 
-BASIC_LEVEL_FIVE_GOAL = (
+BASIC_LEVEL_FOUR_GOAL = (
     "Learn to group neighbouring cells on a Karnaugh map and read the loops "
     "as a short SOP or POS formula."
 )
 
-BASIC_LEVEL_FIVE_HINTS = [
+BASIC_LEVEL_FOUR_HINTS = [
     "Touching cells on a K-map differ in only one variable, so two touching 1s merge into a shorter term.",
     "A loop must hold 1, 2, 4 or 8 cells, form a rectangle (edges wrap round), and hold only 1s or X's. Make loops as big as you can.",
     "Stuck on a stage? Press H on the terminal. First press = a nudge, second = a stronger hint, third = the answer.",
 ]
 
-BASIC_LEVEL_FIVE_FINDINGS = [
+BASIC_LEVEL_FOUR_FINDINGS = [
     "I learned the grouping rules for Karnaugh maps and how to read loops as SOP and POS terms.",
     "Recorded answer: 7-segment segment e = B'D' + CD' (using the don't-care cells 10 to 15).",
 ]
@@ -801,7 +801,7 @@ class DetectiveNotebook:
         """
         self.game_mode = mode
         for name in ("SCIENTIST_NOTES", "LEVEL_GOALS", "LEVEL_HINTS",
-                     "DEFAULT_FINDINGS"):
+                     "DEFAULT_FINDINGS", "LEVEL_PRACTICE"):
             self.__dict__.pop(name, None)          # back to the class defaults
 
         if mode == "basic":
@@ -813,10 +813,14 @@ class DetectiveNotebook:
             hints["level_one"] = list(BASIC_LEVEL_ONE_HINTS)
             findings = dict(DetectiveNotebook.DEFAULT_FINDINGS)
             findings["level_one"] = list(BASIC_LEVEL_ONE_FINDINGS)
-            notes["level_five"] = list(BASIC_LEVEL_FIVE_NOTES)
-            goals["level_five"] = BASIC_LEVEL_FIVE_GOAL
-            hints["level_five"] = list(BASIC_LEVEL_FIVE_HINTS)
-            findings["level_five"] = list(BASIC_LEVEL_FIVE_FINDINGS)
+            # BASIC path: the Karnaugh-map course sits on terminal 4 (Final Override).
+            notes["level_four"] = list(BASIC_LEVEL_FOUR_NOTES)
+            goals["level_four"] = BASIC_LEVEL_FOUR_GOAL
+            hints["level_four"] = list(BASIC_LEVEL_FOUR_HINTS)
+            findings["level_four"] = list(BASIC_LEVEL_FOUR_FINDINGS)
+            practice = dict(DetectiveNotebook.LEVEL_PRACTICE)
+            practice["level_four"] = "KARNAUGH MAPS"
+            self.LEVEL_PRACTICE = practice
             self.SCIENTIST_NOTES = notes
             self.LEVEL_GOALS = goals
             self.LEVEL_HINTS = hints

@@ -980,7 +980,7 @@ def main():
     basic_sessions = {}       # puzzle_id -> Basic puzzle, keeps progress if the player leaves
     basic_puzzles = {
         "logic_lock": BasicGatesPuzzle,           # Level 1: logic gates from zero
-        "logic_architect": BasicKarnaughPuzzle,   # Karnaugh maps
+        "final_override": BasicKarnaughPuzzle,    # Level 4 on the BASIC path: Karnaugh maps
     }
 
     glitch_scene = None
