@@ -15,6 +15,7 @@ from progress import ProgressManager
 
 from puzzles.logic_lock import LogicLockPuzzle
 from puzzles.basic_gates import BasicGatesPuzzle
+from puzzles.basic_kmap import BasicKarnaughPuzzle
 from puzzles.hidden_transmission import HiddenTransmissionPuzzle
 from puzzles.memory_protocol import MemoryProtocolPuzzle
 from puzzles.final_override import FinalOverridePuzzle
@@ -976,7 +977,11 @@ def main():
     # Title-screen path: 0 = BASIC, 1 = INTERMEDIATE.
     game_mode = "intermediate"
     mode_choice = 1
-    basic_session = None      # keeps Basic Level 1 progress if the player leaves
+    basic_sessions = {}       # puzzle_id -> Basic puzzle, keeps progress if the player leaves
+    basic_puzzles = {
+        "logic_lock": BasicGatesPuzzle,           # Level 1: logic gates from zero
+        "logic_architect": BasicKarnaughPuzzle,   # Karnaugh maps
+    }
 
     glitch_scene = None
     false_exit_timer = 0
@@ -1112,11 +1117,13 @@ def main():
 
                     active_puzzle_id = object_id
 
-                    if object_id == "logic_lock" and game_mode == "basic":
-                        # Beginner path: the same terminal opens Basic Level 1.
-                        if basic_session is None:
-                            basic_session = BasicGatesPuzzle(notebook=notebook)
-                        game_state.open_puzzle(basic_session)
+                    if game_mode == "basic" and object_id in basic_puzzles:
+                        # Beginner path: the same terminal opens the Basic version.
+                        if object_id not in basic_sessions:
+                            basic_sessions[object_id] = basic_puzzles[object_id](
+                                notebook=notebook
+                            )
+                        game_state.open_puzzle(basic_sessions[object_id])
                     else:
                         game_state.open_puzzle(puzzle_class())
 

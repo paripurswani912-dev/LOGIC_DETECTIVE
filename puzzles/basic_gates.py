@@ -31,7 +31,6 @@
 #   H                          hint (press again for a stronger one)
 #   ESC                        leave (handled by main.py), N notebook
 
-import math
 import random
 
 import pygame
@@ -668,10 +667,23 @@ FULL = pygame.Rect(30, 85, 940, 470)       # stage-complete card
 class BasicGatesPuzzle(BasePuzzle):
     """Eight-stage beginner course on ON/OFF, bits and logic gates."""
 
+    COURSE_TITLE = "BASIC LEVEL 1  -  LOGIC GATES FROM ZERO"
+    LEGEND_EXTRA = {
+        "bulbs": "click bulbs or press 1-4",
+        "read_bits": "type 0 or 1, BACKSPACE deletes",
+        "explore": "click switches or press A / B",
+        "combine": "A / B switches, 1-3 gate, T = add NOT",
+        "table": "click cell or UP/DOWN, then 0 or 1",
+        "choice": "click an answer or press 0/1 (or 1-4)",
+    }
+
+    def _make_stages(self):
+        return build_stages()
+
     def __init__(self, notebook=None):
         super().__init__()
         self.notebook = notebook
-        self.stages = build_stages()
+        self.stages = self._make_stages()
         self.stage_i = 0
         self.step_i = 0
         self.phase = "play"            # "play" or "done"
@@ -1076,9 +1088,10 @@ class BasicGatesPuzzle(BasePuzzle):
     def _draw_header(self, screen):
         pygame.draw.rect(screen, PANEL, (0, 0, settings.SCREEN_WIDTH, 72))
         pygame.draw.line(screen, PANEL_EDGE, (0, 72), (settings.SCREEN_WIDTH, 72), 2)
-        small = self.f_tiny.render("BASIC LEVEL 1  -  LOGIC GATES FROM ZERO", True, CYAN)
+        small = self.f_tiny.render(self.COURSE_TITLE, True, CYAN)
         screen.blit(small, (30, 10))
-        text = f"Stage {self.stage_i + 1}/8: {self.stage['title']}  -  {self.stage['sub']}"
+        text = (f"Stage {self.stage_i + 1}/{len(self.stages)}: "
+                f"{self.stage['title']}  -  {self.stage['sub']}")
         size = 40
         while size > 22:
             font = pygame.font.Font(None, size)
@@ -1121,14 +1134,7 @@ class BasicGatesPuzzle(BasePuzzle):
         if self.phase == "done":
             return "[ENTER] next stage    [N] notebook    [ESC] leave (progress is saved)"
         kind = self.step["kind"]
-        extra = {
-            "bulbs": "click bulbs or press 1-4",
-            "read_bits": "type 0 or 1, BACKSPACE deletes",
-            "explore": "click switches or press A / B",
-            "combine": "A / B switches, 1-3 gate, T = add NOT",
-            "table": "click cell or UP/DOWN, then 0 or 1",
-            "choice": "click an answer or press 0/1 (or 1-4)",
-        }[kind]
+        extra = self.LEGEND_EXTRA.get(kind, "")
         return f"[ENTER] check    [H] hint (press again for more)    {extra}    [N] notebook    [ESC] leave"
 
     def _button(self, screen, rect, label, action, color):
@@ -1411,6 +1417,10 @@ class BasicGatesPuzzle(BasePuzzle):
 
         visual = step["visual"]
         cy = WORK.y + 215
+        opts = step["options"]
+        int_opts = all(isinstance(v, int) for _l, v in opts)
+        rects = self._option_rects(opts, int_opts)
+        options_top = min(r.y for r in rects)
         if visual == "chips":
             n = len(step["chips"])
             for i, (name, val) in enumerate(step["chips"]):
@@ -1425,27 +1435,40 @@ class BasicGatesPuzzle(BasePuzzle):
             self._draw_mystery_column(screen, step["gate"], WORK.centerx - 130, cy - 80)
         elif visual == "boss":
             self._draw_boss(screen, step["inputs"])
+        else:
+            self._draw_extra_visual(screen, step, y, options_top - 8)
 
-        opts = step["options"]
-        n = len(opts)
-        bw = 210 if n == 2 else 128
-        gap = 20
-        total = n * bw + (n - 1) * gap
-        x = WORK.centerx - total // 2
-        for i, (label, val) in enumerate(opts):
-            rect = pygame.Rect(x + i * (bw + gap), WORK.bottom - 78, bw, 56)
-            if all(isinstance(v, int) for _l, v in opts):
-                selected = st["sel"] == val
-            else:
-                selected = st["sel"] == i
+        for i, ((label, val), rect) in enumerate(zip(opts, rects)):
+            selected = (st["sel"] == val) if int_opts else (st["sel"] == i)
             hover = rect.collidepoint(pygame.mouse.get_pos())
             pygame.draw.rect(screen, (30, 70, 56) if selected else ((24, 46, 66) if hover else (20, 34, 50)),
                              rect, border_radius=8)
             pygame.draw.rect(screen, GREEN if selected else GREY, rect, 3, border_radius=8)
-            prefix = "" if all(isinstance(v, int) for _l, v in opts) else f"{i + 1}  "
+            prefix = "" if int_opts else f"{i + 1}  "
             img = self.f_body.render(prefix + label, True, WHITE)
             screen.blit(img, img.get_rect(center=rect.center))
             self.buttons.append((rect, ("opt", i)))
+
+    def _draw_extra_visual(self, screen, step, top, bottom):
+        """Hook: subclasses draw their own picture above the answer buttons."""
+
+    def _option_rects(self, opts, int_opts):
+        """Answer buttons: a row when the labels are short, a stack when long."""
+        n = len(opts)
+        prefix = "" if int_opts else "4  "
+        widest = max(self.f_body.size(prefix + label)[0] for label, _v in opts)
+        row_w = 210 if n == 2 else 128
+        if widest <= row_w - 16:
+            gap = 20
+            total = n * row_w + (n - 1) * gap
+            x = WORK.centerx - total // 2
+            return [pygame.Rect(x + i * (row_w + gap), WORK.bottom - 78, row_w, 56)
+                    for i in range(n)]
+        height, gap = 40, 8
+        total = n * height + (n - 1) * gap
+        top = WORK.bottom - 14 - total
+        return [pygame.Rect(WORK.x + 30, top + i * (height + gap), WORK.width - 60, height)
+                for i in range(n)]
 
     def _draw_mystery_column(self, screen, gate, x0, y0):
         out = outputs_for(gate)

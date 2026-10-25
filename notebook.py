@@ -85,6 +85,31 @@ BASIC_LEVEL_ONE_FINDINGS = [
 ]
 
 
+BASIC_LEVEL_FIVE_NOTES = [
+    "Lab log: Entry 05 (beginner copy)",
+    "The vault alarm formula is long and messy. A KARNAUGH MAP (K-map) shrinks it with a picture instead of algebra.",
+    "A K-map is a truth table drawn as a grid. Its rows and columns use GRAY CODE (00, 01, 11, 10) so that touching cells differ in only ONE variable. Two touching 1s merge and that variable disappears.",
+    "Draw LOOPS round neighbouring 1s: a rectangle of 1, 2, 4 or 8 cells, as big as possible. The map wraps round its edges, so the four corners are one loop.",
+    "Read each loop as a short term. Add the terms for SOP, or loop the 0s and multiply sums for POS. X cells (don't cares) can help make loops bigger. Your notes are saved in MY BASIC NOTES.",
+]
+
+BASIC_LEVEL_FIVE_GOAL = (
+    "Learn to group neighbouring cells on a Karnaugh map and read the loops "
+    "as a short SOP or POS formula."
+)
+
+BASIC_LEVEL_FIVE_HINTS = [
+    "Touching cells on a K-map differ in only one variable, so two touching 1s merge into a shorter term.",
+    "A loop must hold 1, 2, 4 or 8 cells, form a rectangle (edges wrap round), and hold only 1s or X's. Make loops as big as you can.",
+    "Stuck on a stage? Press H on the terminal. First press = a nudge, second = a stronger hint, third = the answer.",
+]
+
+BASIC_LEVEL_FIVE_FINDINGS = [
+    "I learned the grouping rules for Karnaugh maps and how to read loops as SOP and POS terms.",
+    "Recorded answer: 7-segment segment e = B'D' + CD' (using the don't-care cells 10 to 15).",
+]
+
+
 class DetectiveNotebook:
 
     LEVELS = [
@@ -788,6 +813,10 @@ class DetectiveNotebook:
             hints["level_one"] = list(BASIC_LEVEL_ONE_HINTS)
             findings = dict(DetectiveNotebook.DEFAULT_FINDINGS)
             findings["level_one"] = list(BASIC_LEVEL_ONE_FINDINGS)
+            notes["level_five"] = list(BASIC_LEVEL_FIVE_NOTES)
+            goals["level_five"] = BASIC_LEVEL_FIVE_GOAL
+            hints["level_five"] = list(BASIC_LEVEL_FIVE_HINTS)
+            findings["level_five"] = list(BASIC_LEVEL_FIVE_FINDINGS)
             self.SCIENTIST_NOTES = notes
             self.LEVEL_GOALS = goals
             self.LEVEL_HINTS = hints
@@ -819,7 +848,10 @@ class DetectiveNotebook:
             ]
             return
         notes = ["MY REVISION SHEET (AUTO-SAVED)"]
-        for stage_id in sorted(self.basic_notes_by_stage):
+        # Logic-gate stages (s1..s8) first, then Karnaugh stages (k1..k8).
+        order = sorted(self.basic_notes_by_stage,
+                       key=lambda sid: ("sk".find(sid[0]), sid))
+        for stage_id in order:
             notes.extend(self.basic_notes_by_stage[stage_id])
         self.reference_notes["MY BASIC NOTES"] = notes
 
