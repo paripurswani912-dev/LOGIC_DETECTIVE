@@ -16,6 +16,8 @@ from progress import ProgressManager
 from puzzles.logic_lock import LogicLockPuzzle
 from puzzles.basic_gates import BasicGatesPuzzle
 from puzzles.basic_kmap import BasicKarnaughPuzzle
+from puzzles.basic_comb import BasicCombinationalPuzzle
+from puzzles.basic_seq import BasicSequentialPuzzle
 from puzzles.hidden_transmission import HiddenTransmissionPuzzle
 from puzzles.memory_protocol import MemoryProtocolPuzzle
 from puzzles.final_override import FinalOverridePuzzle
@@ -981,6 +983,8 @@ def main():
     basic_puzzles = {
         "logic_lock": BasicGatesPuzzle,           # Level 1: logic gates from zero
         "final_override": BasicKarnaughPuzzle,    # Level 4 on the BASIC path: Karnaugh maps
+        "logic_architect": BasicCombinationalPuzzle,  # Level 5 on the BASIC path: combinational circuits
+        "signal_breaker": BasicSequentialPuzzle,  # Level 6 on the BASIC path: flip-flops, registers, counters
     }
 
     glitch_scene = None

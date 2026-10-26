@@ -27,6 +27,8 @@ import math
 import random
 import pygame
 
+from puzzles.comb_lab import CombLab, notes_lines as _comb_notes_lines
+
 # The Boolean Algebra lab reuses the circuit simulator + mouse workbench.
 try:
     from puzzles.circuit_engine import Circuit, Component, Workbench
@@ -107,6 +109,55 @@ BASIC_LEVEL_FOUR_HINTS = [
 BASIC_LEVEL_FOUR_FINDINGS = [
     "I learned the grouping rules for Karnaugh maps and how to read loops as SOP and POS terms.",
     "Recorded answer: 7-segment segment e = B'D' + CD' (using the don't-care cells 10 to 15).",
+]
+
+BASIC_LEVEL_FIVE_NOTES = [
+    "Lab log: Entry 05 (beginner copy)",
+    "The alarm is built from circuits that decide straight from their inputs, with no memory. They are called COMBINATIONAL circuits: adders, subtractors, parity checkers, decoders and multiplexers.",
+    "To add two bits you need a SUM and a CARRY (1 + 1 = 10 in binary). Chain full adders to add whole numbers. One XOR gate on the second number turns the adder into a subtractor.",
+    "A DECODER turns a code into ONE chosen wire. A MULTIPLEXER (MUX) is a selector: many inputs in, one chosen output. A PARITY bit lets a receiver notice a damaged bit.",
+    "Each finished stage is saved in MY BASIC NOTES. Replay any circuit in TEST THE LOGIC > COMBINATIONAL CIRCUITS.",
+]
+
+BASIC_LEVEL_FIVE_GOAL = (
+    "Understand what adders, subtractors, parity circuits, decoders and multiplexers "
+    "are for, and build each one from its truth table."
+)
+
+BASIC_LEVEL_FIVE_HINTS = [
+    "Every circuit here has NO memory: change the inputs and the output changes at once.",
+    "Adders and subtractors use XOR for the Sum or Diff. A decoder lights one output per input code. A MUX copies the one input chosen by its select lines.",
+    "Stuck on a stage? Press H on the terminal. First press = a nudge, second = a stronger hint, third = the answer.",
+]
+
+BASIC_LEVEL_FIVE_FINDINGS = [
+    "I learned how adders, subtractors, parity generators, decoders and multiplexers are built from gates.",
+    "Recorded answer: full adder Sum = Sum m(1, 2, 4, 7) and Cout = Sum m(3, 5, 6, 7).",
+]
+
+
+BASIC_LEVEL_SIX_NOTES = [
+    "Lab log: Entry 06 (beginner copy)",
+    "The last terminal scrambles a signal over time. To fix it you need circuits that REMEMBER. A FLIP-FLOP stores one bit and updates only at the clock pulse.",
+    "Put flip-flops in a row and you get a SHIFT REGISTER: bits move one place at every pulse. Make them toggle and you get a COUNTER that counts pulses in binary.",
+    "A TIMING DIAGRAM draws the clock and every signal against time. Inputs change before the rising edge, and the output changes AT the edge.",
+    "Ripple counters pass the clock along and are slow. Synchronous counters give every flip-flop the same clock. Your notes are saved in MY BASIC NOTES.",
+]
+
+BASIC_LEVEL_SIX_GOAL = (
+    "Learn how flip-flops remember a bit, then use them to read timing diagrams "
+    "and to build shift registers and counters."
+)
+
+BASIC_LEVEL_SIX_HINTS = [
+    "A flip-flop stores one bit and only changes at the rising edge of the clock. Between edges it holds its value.",
+    "A shift register moves every bit one place per pulse, so n bits need n pulses to cross. A counter is a row of T flip-flops that toggle.",
+    "Stuck on a stage? Press H on the terminal. First press = a nudge, second = a stronger hint, third = the answer.",
+]
+
+BASIC_LEVEL_SIX_FINDINGS = [
+    "I learned how SR, D, T and JK flip-flops work, and how shift registers and counters are built from them.",
+    "Recorded answer: a synchronous 3-bit counter has T0 = 1, T1 = Q0 and T2 = Q0 AND Q1.",
 ]
 
 
@@ -363,6 +414,7 @@ class DetectiveNotebook:
             "STATE MACHINES",
             "BOOLEAN ALGEBRA",
             "KARNAUGH MAPS",
+            "COMBINATIONAL CIRCUITS",
             "REGISTERS AND LFSRs",
         ]
 
@@ -670,6 +722,9 @@ class DetectiveNotebook:
         # Same convention as Level 6: 5 cells, shift RIGHT, output = CELL 5,
         # feedback (XOR of the tapped cells) enters CELL 1.
         self.tiny_font = self._font(12)
+        self.comb = CombLab()                 # COMBINATIONAL CIRCUITS lab (both paths)
+        self.comb_notes = False
+        self.reference_notes["COMBINATIONAL CIRCUITS"] = _comb_notes_lines()
         self.lfsr_seed = [1, 0, 0, 1, 0]      # demo values, not the puzzle's
         self.lfsr_taps = {1, 4}               # CELL 2 and CELL 5
         self.lfsr_hist = [list(self.lfsr_seed)]
@@ -818,8 +873,19 @@ class DetectiveNotebook:
             goals["level_four"] = BASIC_LEVEL_FOUR_GOAL
             hints["level_four"] = list(BASIC_LEVEL_FOUR_HINTS)
             findings["level_four"] = list(BASIC_LEVEL_FOUR_FINDINGS)
+            # BASIC path: the combinational-circuits course sits on terminal 5.
+            notes["level_five"] = list(BASIC_LEVEL_FIVE_NOTES)
+            goals["level_five"] = BASIC_LEVEL_FIVE_GOAL
+            hints["level_five"] = list(BASIC_LEVEL_FIVE_HINTS)
+            findings["level_five"] = list(BASIC_LEVEL_FIVE_FINDINGS)
+            # BASIC path: flip-flops, shift registers and counters sit on terminal 6.
+            notes["level_six"] = list(BASIC_LEVEL_SIX_NOTES)
+            goals["level_six"] = BASIC_LEVEL_SIX_GOAL
+            hints["level_six"] = list(BASIC_LEVEL_SIX_HINTS)
+            findings["level_six"] = list(BASIC_LEVEL_SIX_FINDINGS)
             practice = dict(DetectiveNotebook.LEVEL_PRACTICE)
             practice["level_four"] = "KARNAUGH MAPS"
+            practice["level_five"] = "COMBINATIONAL CIRCUITS"
             self.LEVEL_PRACTICE = practice
             self.SCIENTIST_NOTES = notes
             self.LEVEL_GOALS = goals
@@ -852,9 +918,9 @@ class DetectiveNotebook:
             ]
             return
         notes = ["MY REVISION SHEET (AUTO-SAVED)"]
-        # Logic-gate stages (s1..s8) first, then Karnaugh stages (k1..k8).
+        # Logic-gate stages (s1..s8), then Karnaugh (k1..k9), then combinational (c1..c9), then flip-flops (q).
         order = sorted(self.basic_notes_by_stage,
-                       key=lambda sid: ("sk".find(sid[0]), sid))
+                       key=lambda sid: ("skcq".find(sid[0]), sid))
         for stage_id in order:
             notes.extend(self.basic_notes_by_stage[stage_id])
         self.reference_notes["MY BASIC NOTES"] = notes
@@ -903,6 +969,12 @@ class DetectiveNotebook:
             if self._bool_mouse(event):
                 return True
 
+        # Combinational lab: clicking a switch or the PREV / NEXT buttons.
+        if (self._on_comb_page() and not self.comb_notes
+                and event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
+                and self.comb.handle_click(event.pos)):
+            return True
+
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_n:
                 self.close()
@@ -924,6 +996,9 @@ class DetectiveNotebook:
                 return True
 
             if self._on_km_page() and self._km_handle_key(event):
+                return True
+
+            if self._on_comb_page() and self._comb_handle_key(event):
                 return True
 
             # STATE MACHINES lab: A/B/C are the machine's buttons, so these
@@ -1055,6 +1130,7 @@ class DetectiveNotebook:
         self.bool_notes = False
         self.bool_test = False
         self.bool_msg = ""
+        self.comb_notes = False
         self.km_notes = False
         self.km_test = False
         self.km_sel.clear()
@@ -1230,6 +1306,10 @@ class DetectiveNotebook:
 
         elif action_type == "km_notes":
             self.km_notes = not self.km_notes
+            self.topic_scroll = 0
+
+        elif action_type == "comb_notes":
+            self.comb_notes = not self.comb_notes
             self.topic_scroll = 0
 
         elif action_type == "back":
@@ -1633,6 +1713,8 @@ class DetectiveNotebook:
         button_width = content.width - 6
         button_h = 39
         gap = 12
+        if len(self.reference_topics) > 8:       # BASIC path: nine topics must still fit
+            button_h, gap = 33, 7
         y = content.y + 49
 
         for topic in self.reference_topics:
@@ -1955,6 +2037,10 @@ class DetectiveNotebook:
             self._draw_kmap_lab(screen, content)
             return
 
+        if topic == "COMBINATIONAL CIRCUITS" and not self.comb_notes:
+            self._draw_comb_lab(screen, content)
+            return
+
         title = self._fit_text(topic, content.width, 20, INK)
         screen.blit(title, (content.x + 3, content.y + 2))
 
@@ -2017,6 +2103,7 @@ class DetectiveNotebook:
             "STATE MACHINES": "sm_notes",
             "BOOLEAN ALGEBRA": "bool_notes",
             "KARNAUGH MAPS": "km_notes",
+            "COMBINATIONAL CIRCUITS": "comb_notes",
         }
         if topic in lab_actions:
             lab_rect = pygame.Rect(content.right - 190, self.back_button.y,
@@ -3087,6 +3174,8 @@ class DetectiveNotebook:
             return self.bool_notes
         if topic == "KARNAUGH MAPS":
             return self.km_notes
+        if topic == "COMBINATIONAL CIRCUITS":
+            return self.comb_notes
         return True
 
     def _on_numbers_page(self):
@@ -4616,4 +4705,38 @@ class DetectiveNotebook:
         screen.blit(h_surf, (self.back_button.right + 14,
                              self.back_button.y + 8))
 
+        self._draw_back_button(screen)
+
+    # --------------------------------------------------------
+    # COMBINATIONAL CIRCUITS LAB (shared by both paths)
+    # --------------------------------------------------------
+    # The circuits live in puzzles/comb_lab.py (the Level 5 course draws the
+    # same ones).  LEFT / RIGHT change circuit, 1-9 flip inputs, T = notes.
+
+    def _on_comb_page(self):
+        return (self.page == "reference_topic"
+                and self.selected_level == "COMBINATIONAL CIRCUITS")
+
+    def _comb_handle_key(self, event):
+        if event.key == pygame.K_t:
+            self.comb_notes = not self.comb_notes
+            self.topic_scroll = 0
+            return True
+        if self.comb_notes:
+            return False
+        return self.comb.handle_key(event)
+
+    def _draw_comb_lab(self, screen, content):
+        self.buttons = []
+        fonts = {"body": self.small_font, "small": self.small_font,
+                 "tiny": self.tiny_font}
+        self.comb.draw(screen, content, self.back_button.y - 6, fonts)
+        notes = pygame.Rect(content.right - 130, self.back_button.y, 130,
+                            self.back_button.height)
+        self._draw_button(screen, notes, "NOTES [T]", False)
+        self.buttons.append((notes, ("comb_notes", None)))
+        hint = "CLICK SWITCHES OR PRESS 1-9   LEFT/RIGHT: CIRCUIT   R: RESET"
+        room = notes.x - (self.back_button.right + 14) - 8
+        screen.blit(self._fit_text(hint, room, 12, MUTED),
+                    (self.back_button.right + 14, self.back_button.y + 8))
         self._draw_back_button(screen)

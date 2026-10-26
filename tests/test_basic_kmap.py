@@ -300,8 +300,9 @@ def test_notebook_order_and_text():
     assert "K-MAP" in " ".join(nb.SCIENTIST_NOTES["level_four"]).upper()
     assert nb.LEVEL_PRACTICE["level_four"] == "KARNAUGH MAPS"
     assert "Karnaugh" not in nb.LEVEL_GOALS["level_four"] or "Karnaugh" in nb.LEVEL_GOALS["level_four"]
-    assert nb.SCIENTIST_NOTES["level_five"] == DetectiveNotebook.SCIENTIST_NOTES["level_five"]
-    assert nb.LEVEL_GOALS["level_five"] == DetectiveNotebook.LEVEL_GOALS["level_five"]
+    # terminal 5 is now the Basic combinational course (Level 5)
+    assert nb.SCIENTIST_NOTES["level_five"] != DetectiveNotebook.SCIENTIST_NOTES["level_five"]
+    assert nb.LEVEL_PRACTICE["level_five"] == "COMBINATIONAL CIRCUITS"
     nb.set_mode("intermediate")
     # INTERMEDIATE is untouched
     for name in ("SCIENTIST_NOTES", "LEVEL_GOALS", "LEVEL_HINTS", "DEFAULT_FINDINGS", "LEVEL_PRACTICE"):
