@@ -503,7 +503,7 @@ def test_notebook(screen):
     assert nb.LEVEL_GOALS["level_five"] != base["LEVEL_GOALS"]["level_five"]
     for other in ("level_one", "level_four"):
         assert nb.SCIENTIST_NOTES[other] != base["SCIENTIST_NOTES"][other]
-    for other in ("level_two", "level_three"):   # level_six is now the Basic sequential course
+    for other in ("level_two",):   # level_three / level_six are now the Basic number-systems / sequential courses
         assert nb.SCIENTIST_NOTES[other] == base["SCIENTIST_NOTES"][other]
     # INTERMEDIATE: scientist text untouched (only the shared lab was added)
     nb.set_mode("intermediate")

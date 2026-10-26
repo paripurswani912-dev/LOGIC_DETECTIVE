@@ -13,7 +13,7 @@ OUT_NAME = "logic_detective_handoff.zip"
 
 SKIP_DIRS = {
     ".venv", "venv", "env", "__pycache__", ".git", ".idea", ".vscode",
-    "Screenshots", "screenshots", "basic_shots", "kmap_shots", "seq_shots",
+    "Screenshots", "screenshots", "basic_shots", "kmap_shots", "seq_shots", "num_shots",
     "de zip", "basic_mode_update_v2", "basic_mode_update_v3", "basic_mode_update_v6",
 }
 SKIP_SUFFIX = (".zip", ".pyc", ".pyo")

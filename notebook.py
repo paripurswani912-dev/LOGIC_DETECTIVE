@@ -161,6 +161,31 @@ BASIC_LEVEL_SIX_FINDINGS = [
 ]
 
 
+BASIC_LEVEL_THREE_NOTES = [
+    "Lab log: Entry 03 (beginner copy)",
+    "The memory vault stores its codes as numbers, but not the ones you count with. Computers use only two digits, so you must switch between BINARY, OCTAL, DECIMAL and HEXADECIMAL.",
+    "Place values are powers of the base. Decimal to binary: subtract powers of two, or divide by 2 and read the remainders from the bottom up. Group bits in 3s for octal and 4s for hex.",
+    "Negative numbers use a SIGN BIT. 2's complement (flip every bit, add 1) lets one adder add and subtract. A result outside the range is OVERFLOW.",
+    "Other codes: BCD (each digit as 4 bits), EXCESS-3 and GRAY code (one bit changes per step). Every stage and the exam revision sheet are saved in MY BASIC NOTES.",
+]
+
+BASIC_LEVEL_THREE_GOAL = (
+    "Convert between binary, octal, decimal and hex, write negative numbers in 2's complement, "
+    "add and subtract in binary, and use BCD, excess-3 and Gray code."
+)
+
+BASIC_LEVEL_THREE_HINTS = [
+    "Every number system works the same way: place value = base to the power of the position.",
+    "Decimal to binary: divide by 2 and read the remainders bottom to top. Negative numbers: flip the bits and add 1.",
+    "Stuck on a stage? Press H on the terminal. First press = a nudge, second = a stronger hint, third = the answer.",
+]
+
+BASIC_LEVEL_THREE_FINDINGS = [
+    "I learned how to convert between number systems and how signed numbers, BCD, excess-3 and Gray code work.",
+    "Recorded answer: -75 in 8-bit 2's complement is 10110101.",
+]
+
+
 class DetectiveNotebook:
 
     LEVELS = [
@@ -868,6 +893,11 @@ class DetectiveNotebook:
             hints["level_one"] = list(BASIC_LEVEL_ONE_HINTS)
             findings = dict(DetectiveNotebook.DEFAULT_FINDINGS)
             findings["level_one"] = list(BASIC_LEVEL_ONE_FINDINGS)
+            # BASIC path: number systems and codes sit on terminal 3.
+            notes["level_three"] = list(BASIC_LEVEL_THREE_NOTES)
+            goals["level_three"] = BASIC_LEVEL_THREE_GOAL
+            hints["level_three"] = list(BASIC_LEVEL_THREE_HINTS)
+            findings["level_three"] = list(BASIC_LEVEL_THREE_FINDINGS)
             # BASIC path: the Karnaugh-map course sits on terminal 4 (Final Override).
             notes["level_four"] = list(BASIC_LEVEL_FOUR_NOTES)
             goals["level_four"] = BASIC_LEVEL_FOUR_GOAL
@@ -884,6 +914,7 @@ class DetectiveNotebook:
             hints["level_six"] = list(BASIC_LEVEL_SIX_HINTS)
             findings["level_six"] = list(BASIC_LEVEL_SIX_FINDINGS)
             practice = dict(DetectiveNotebook.LEVEL_PRACTICE)
+            practice["level_three"] = "NUMBER SYSTEMS AND CODES"
             practice["level_four"] = "KARNAUGH MAPS"
             practice["level_five"] = "COMBINATIONAL CIRCUITS"
             self.LEVEL_PRACTICE = practice
@@ -918,9 +949,9 @@ class DetectiveNotebook:
             ]
             return
         notes = ["MY REVISION SHEET (AUTO-SAVED)"]
-        # Logic-gate stages (s1..s8), then Karnaugh (k1..k9), then combinational (c1..c9), then flip-flops (q).
+        # Logic-gate stages (s1..s8), number systems (n01..n11), Karnaugh (k1..k9), combinational (c1..c9), flip-flops (q).
         order = sorted(self.basic_notes_by_stage,
-                       key=lambda sid: ("skcq".find(sid[0]), sid))
+                       key=lambda sid: ("snkcq".find(sid[0]), sid))
         for stage_id in order:
             notes.extend(self.basic_notes_by_stage[stage_id])
         self.reference_notes["MY BASIC NOTES"] = notes

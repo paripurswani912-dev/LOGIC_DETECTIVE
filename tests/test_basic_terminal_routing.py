@@ -33,7 +33,7 @@ def key(k):
 CASES = [
     ("basic", "logic_lock", "BasicGatesPuzzle"),
     ("basic", "hidden_transmission", "HiddenTransmissionPuzzle"),
-    ("basic", "memory_protocol", "MemoryProtocolPuzzle"),
+    ("basic", "memory_protocol", "BasicNumberSystemsPuzzle"),
     ("basic", "final_override", "BasicKarnaughPuzzle"),
     ("basic", "logic_architect", "BasicCombinationalPuzzle"),
     ("basic", "signal_breaker", "BasicSequentialPuzzle"),

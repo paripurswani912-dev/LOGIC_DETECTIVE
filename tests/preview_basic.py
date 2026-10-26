@@ -3,6 +3,7 @@
     python tests/preview_basic.py gates     Basic Level 1: logic gates from zero
     python tests/preview_basic.py kmap      Basic Karnaugh maps
     python tests/preview_basic.py comb      Basic Level 5: combinational circuits
+    python tests/preview_basic.py num       Basic Level 3: number systems and codes
     python tests/preview_basic.py seq       Basic Level 6: flip-flops, registers, counters
     python tests/preview_basic.py lab       the notebook lab COMBINATIONAL CIRCUITS (opens at once)
 
@@ -23,16 +24,18 @@ from puzzles.basic_gates import BasicGatesPuzzle
 from puzzles.basic_kmap import BasicKarnaughPuzzle
 from puzzles.basic_comb import BasicCombinationalPuzzle
 from puzzles.basic_seq import BasicSequentialPuzzle
+from puzzles.basic_numbers import BasicNumberSystemsPuzzle
 
 COURSES = {"gates": BasicGatesPuzzle, "kmap": BasicKarnaughPuzzle,
            "comb": BasicCombinationalPuzzle, "lab": BasicCombinationalPuzzle,
-           "seq": BasicSequentialPuzzle}
+           "seq": BasicSequentialPuzzle,
+           "num": BasicNumberSystemsPuzzle}
 
 
 def main():
     name = sys.argv[1] if len(sys.argv) > 1 else "kmap"
     if name not in COURSES:
-        print("usage: python tests/preview_basic.py [gates|kmap|comb|seq|lab]")
+        print("usage: python tests/preview_basic.py [gates|num|kmap|comb|seq|lab]")
         return
     pygame.init()
     screen = pygame.display.set_mode((settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT))
