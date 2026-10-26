@@ -179,8 +179,6 @@ def draw_waveforms(screen, fonts, x0, y0, per_w, n, rows, row_h=60, mark_edge=No
         x = x0 + k * per_w + per_w // 2
         color = YELLOW if mark_edge == k else (62, 84, 104)
         dashed_vline(screen, x, y0 - 6, y0 + total_h - 8, color)
-        if mark_edge is None or mark_edge == k:
-            pass
     for r, row in enumerate(rows):
         base = y0 + r * row_h + amp + 14
         color = row.get("color", WHITE)
@@ -318,16 +316,17 @@ def draw_counter_chain(screen, fonts, x0, y0, n, mode, qvals=None, tvals=None, b
         rects.append(rect)
         pygame.draw.rect(screen, (22, 40, 58), rect, border_radius=6)
         pygame.draw.rect(screen, WHITE, rect, 3, border_radius=6)
-        t = f_body.render("T", True, YELLOW)
-        screen.blit(t, t.get_rect(center=(rect.centerx + 8, rect.y + 24)))
+        t = f_tiny.render("T", True, YELLOW)
+        screen.blit(t, t.get_rect(topleft=(rect.x + 8, rect.y + 6)))
         cy = rect.bottom - 18
         tri = [(rect.x, cy - 9), (rect.x + 12, cy), (rect.x, cy + 9)]
         pygame.draw.lines(screen, WHITE, True, tri, 2)
         name = f_tiny.render(f"FF{i}", True, CYAN)
-        screen.blit(name, name.get_rect(midbottom=(rect.centerx, rect.y - 3)))
+        screen.blit(name, name.get_rect(midbottom=(rect.centerx, rect.y - 4)))
         q = None if qvals is None else qvals[i]
-        qlab = f_tiny.render(f"Q{i}" + ("" if q is None else f"={q}"), True, GREEN if q else WHITE)
-        screen.blit(qlab, qlab.get_rect(midleft=(rect.right + 3, rect.y + 8)))
+        val = "?" if q is None else str(q)
+        qlab = f_body.render(val, True, GREEN if q else WHITE)
+        screen.blit(qlab, qlab.get_rect(center=(rect.centerx + 8, rect.y + 36)))
     clk_y = y0 + box_h - 18
     if mode == "ripple":
         pygame.draw.line(screen, YELLOW, (x0 - 34, clk_y), (x0, clk_y), 3)
@@ -335,10 +334,10 @@ def draw_counter_chain(screen, fonts, x0, y0, n, mode, qvals=None, tvals=None, b
         screen.blit(lab, lab.get_rect(midright=(x0 - 38, clk_y)))
         for i in range(1, n):
             a, b = rects[i - 1], rects[i]
-            pts = [(a.right + 2, a.y + 24), (a.right + gap // 2, a.y + 24),
+            pts = [(a.right + 2, a.y + 60), (a.right + gap // 2, a.y + 60),
                    (a.right + gap // 2, clk_y), (b.x, clk_y)]
             pygame.draw.lines(screen, CYAN, False, pts, 3)
-        note, note_y = "Each flip-flop is clocked by the Q of the one before", y0 + box_h + 10
+        note = "Each flip-flop is clocked by the one before it"
     else:
         bus_y = y0 + box_h + 26
         pygame.draw.line(screen, YELLOW, (x0 - 34, bus_y), (rects[-1].x - 8, bus_y), 3)
@@ -347,15 +346,15 @@ def draw_counter_chain(screen, fonts, x0, y0, n, mode, qvals=None, tvals=None, b
         for r in rects:
             pygame.draw.line(screen, YELLOW, (r.x - 8, bus_y), (r.x - 8, clk_y), 3)
             pygame.draw.line(screen, YELLOW, (r.x - 8, clk_y), (r.x, clk_y), 3)
-        note, note_y = "ONE clock wire goes to every flip-flop", y0 + box_h + 36
+        note = "ONE clock wire goes to every flip-flop"
     if tvals is not None:
         for i, r in enumerate(rects):
-            expr = "T0 = 1" if i == 0 else "T%d = %s" % (i, " ".join(f"Q{j}" for j in range(i)))
+            expr = "T0 = 1" if i == 0 else "T%d = %s" % (i, " AND ".join(f"Q{j}" for j in range(i)))
             on = bool(tvals[i])
-            img = f_tiny.render(f"{expr}  ({tvals[i]})", True, GREEN if on else GREY)
-            screen.blit(img, img.get_rect(midbottom=(r.centerx, y0 - 20)))
+            img = f_tiny.render(f"{expr} ({tvals[i]})", True, GREEN if on else GREY)
+            screen.blit(img, img.get_rect(midbottom=(r.centerx, y0 - 14)))
     img = f_tiny.render(note, True, GREY)
-    screen.blit(img, (x0, note_y))
+    screen.blit(img, (x0, y0 + box_h + 44))
     return rects
 
 
@@ -414,20 +413,20 @@ def _ffplay(kind, task):
         m = p.missing_combo_text()
         return "You have tried every combination. Press ENTER." if m is None else f"Still untried: {m}."
     return {"kind": "ffplay", "ff": kind, "task": task,
-            "hints": ["Set the switches, then press CLOCK. The box only looks at its inputs at the clock pulse.",
-                      "The boxes at the bottom show which combinations you have tried. Fill them all.",
+            "hints": ["Click a switch to turn it ON (green) or OFF. Those are the inputs.",
+                      "Press CLOCK (or SPACE). The box only reads its switches at that moment.",
                       reveal]}
 
 
 FFTABLE_HINTS = {
-    "SR": ["Qn is what the box stored BEFORE the clock, Qn+1 what it stores AFTER. S sets it to 1, R resets it to 0.",
-           "S=0 R=0: nothing changes (Qn+1 = Qn). S=0 R=1: Qn+1 = 0. S=1 R=0: Qn+1 = 1. S=1 R=1: not allowed, enter X."],
-    "D": ["D is simply copied into Q at the clock pulse.",
+    "SR": ["Qn is the stored bit BEFORE the clock. Qn+1 is the stored bit AFTER the clock.",
+           "S = 0, R = 0: nothing changes. S = 0, R = 1: Qn+1 = 0. S = 1, R = 0: Qn+1 = 1. S = 1, R = 1: not allowed, type X."],
+    "D": ["D is copied into Q at the clock pulse.",
           "Qn+1 = D, whatever Qn was. So the answer column equals the D column."],
-    "T": ["T = 0 means hold, T = 1 means toggle (flip).",
-          "T=0: Qn+1 = Qn. T=1: Qn+1 is the opposite of Qn."],
-    "JK": ["J works like S (set), K works like R (reset). J = K = 1 is allowed here: it TOGGLES.",
-           "J=0 K=0: hold. J=0 K=1: 0. J=1 K=0: 1. J=1 K=1: the opposite of Qn."],
+    "T": ["T = 0 means hold. T = 1 means flip.",
+          "T = 0: Qn+1 is the same as Qn. T = 1: Qn+1 is the opposite of Qn."],
+    "JK": ["J acts like S (set) and K acts like R (reset). J = K = 1 flips the bit.",
+           "J = 0, K = 0: same as before. J = 0, K = 1: 0. J = 1, K = 0: 1. J = 1, K = 1: the opposite of Qn."],
 }
 
 
@@ -445,15 +444,15 @@ def _wavefill(kind, q0, inputs, task=None, given=None):
     assert None not in expect
     signals = [{"name": nm, "kind": "input", "vals": inputs[nm], "init": inputs[nm][0],
                 "color": SIGNAL_COLORS[i]} for i, nm in enumerate(names)]
-    first = {"D": "Look at D at each rising edge (the dashed line). Q copies it.",
-             "T": "Look at T at each rising edge. T = 1 flips Q, T = 0 keeps it.",
-             "JK": "Look at J and K at each rising edge. Use the JK table you filled in.",
-             "SR": "Look at S and R at each rising edge."}[kind]
+    first = {"D": "Look at D at each dashed line. Q copies it.",
+             "T": "Look at T at each dashed line. T = 1 flips Q. T = 0 keeps Q.",
+             "JK": "Look at J and K at each dashed line. Use the JK table you filled in.",
+             "SR": "Look at S and R at each dashed line."}[kind]
     return {"kind": "wavefill", "periods": n, "signals": signals, "q0": q0, "expect": expect,
             "ans_name": "Q", "exam": True,
             "task": task or "Fill in Q after each rising edge. Q starts at %d." % q0,
             "hints": [first,
-                      "Go edge by edge. Q only changes at an edge, and stays the same until the next one.",
+                      "Go one dashed line at a time. Q only changes at a dashed line and stays the same until the next one.",
                       "Q after each edge: " + _vtxt(expect) + "."]}
 
 
@@ -856,7 +855,7 @@ def _stage_sync():
             _sdemo(frames),
             _cntplay(3, 8, "sync", {"t_seen": 2},
                      "Press CLOCK and watch the T inputs. Find a count where T2 = 1.",
-                     ["Press CLOCK and read the T inputs under the flip-flops.",
+                     ["Press CLOCK and read the T inputs above the flip-flops.",
                       "T2 is 1 only when Q0 and Q1 are both 1. Which count is that?",
                       "Press CLOCK three times (count 011). Then T2 = 1."]),
             {"kind": "exctable", "title": "2-bit counter design", "left_heads": ["Q1 Q0", "Next"], "left": t_rows,
@@ -1348,18 +1347,21 @@ class BasicSequentialPuzzle(BasicGatesPuzzle):
             screen.blit(img, img.get_rect(center=tag.center))
 
     def _intro(self, screen, text):
+        """Draws the task text at the top and returns the y just below it."""
         width = WORK.width - 40 - (110 if self.step.get("exam") else 0)
-        y = WORK.y + 14
-        for line in wrap_text(self.f_small, text, width)[:4]:
+        y = WORK.y + 12
+        for line in wrap_text(self.f_small, text, width)[:3]:
             screen.blit(self.f_small.render(line, True, CYAN), (WORK.x + 20, y))
             y += 22
         return y
 
-    def _caption(self, screen, text):
-        y = WORK.bottom - 112
+    def _caption(self, screen, text, top):
+        """Draws a caption starting at `top` and returns the y just below it."""
+        y = top
         for line in wrap_text(self.f_body, text, WORK.width - 40)[:4]:
             screen.blit(self.f_body.render(line, True, WHITE), (WORK.x + 20, y))
             y += 26
+        return y
 
     def _cell(self, screen, rect, text, selected=False, bad=False, filled=True, color=WHITE):
         pygame.draw.rect(screen, (28, 54, 40) if filled else (30, 34, 44), rect, border_radius=6)
@@ -1405,8 +1407,9 @@ class BasicSequentialPuzzle(BasicGatesPuzzle):
         step, st = self.step, self.st
         frame = step["frames"][st["frame"]]
         kind, spec = frame["draw"]
+        top = WORK.y + 56
         if kind == "ff":
-            rect = pygame.Rect(WORK.centerx - 70, WORK.y + 85, 140, 200)
+            rect = pygame.Rect(WORK.centerx - 70, top + 10, 140, 160)
             draw_flipflop(screen, self.fonts, rect, spec["kind"], spec["q"], spec.get("ins"))
             self._draw_ffout(screen, rect, spec["q"])
         elif kind == "wave":
@@ -1414,44 +1417,44 @@ class BasicSequentialPuzzle(BasicGatesPuzzle):
             per_w = min(110, 440 // n)
             x0 = WORK.x + 100
             rows = spec["rows"]
-            draw_waveforms(screen, self.fonts, x0, WORK.y + 90, per_w, n, rows, row_h=64, mark_edge=spec.get("mark"))
+            draw_waveforms(screen, self.fonts, x0, top, per_w, n, rows, row_h=48, mark_edge=spec.get("mark"))
             if spec.get("arrows"):
                 for k in range(n):
                     ax = x0 + k * per_w + per_w // 2
-                    draw_arrow(screen, (ax, WORK.y + 90 + 64 - 6), (ax, WORK.y + 90 + 30), YELLOW, 3)
+                    draw_arrow(screen, (ax, top + 48 - 6), (ax, top + 16), YELLOW, 3)
         elif kind == "reg":
             width = 4 * 62 + 3 * 28
             x0 = WORK.centerx - width // 2 + 20
-            draw_register(screen, self.fonts, x0, WORK.y + 170, spec["bits"], serial_in=spec.get("serial_in", False),
+            draw_register(screen, self.fonts, x0, top + 60, spec["bits"], serial_in=spec.get("serial_in", False),
                           parallel_in=spec.get("parallel_in", False), serial_out=spec.get("serial_out", False),
                           parallel_out=spec.get("parallel_out", False), si_value=spec.get("si"))
         elif kind == "counter":
-            self._draw_counter_frame(screen, spec)
-        self._caption(screen, frame["caption"])
+            self._draw_counter_frame(screen, spec, top)
+        self._caption(screen, frame["caption"], WORK.bottom - 150)
         total = len(step["frames"])
+        dots_y = WORK.bottom - 170
         for i in range(total):
             cx = WORK.centerx - (total - 1) * 14 + i * 28
             if i == st["frame"]:
-                pygame.draw.circle(screen, CYAN, (cx, WORK.y + 24), 8)
+                pygame.draw.circle(screen, CYAN, (cx, dots_y), 8)
             elif i < st["seen"]:
-                pygame.draw.circle(screen, GREEN, (cx, WORK.y + 24), 6)
+                pygame.draw.circle(screen, GREEN, (cx, dots_y), 6)
             else:
-                pygame.draw.circle(screen, GREY, (cx, WORK.y + 24), 6, 2)
-        for label, delta, bx in (("< BACK", -1, WORK.x + 20), ("NEXT >", 1, WORK.right - 130)):
-            self._button(screen, pygame.Rect(bx, WORK.y + 8, 110, 32), label, ("sframe", delta), CYAN)
+                pygame.draw.circle(screen, GREY, (cx, dots_y), 6, 2)
+        self._button(screen, pygame.Rect(WORK.x + 20, WORK.bottom - 54, 110, 36), "< BACK", ("sframe", -1), CYAN)
+        self._button(screen, pygame.Rect(WORK.right - 130, WORK.bottom - 54, 110, 36), "NEXT >", ("sframe", 1), CYAN)
 
-    def _draw_counter_frame(self, screen, spec):
+    def _draw_counter_frame(self, screen, spec, top):
         n = spec["nbits"]
         pulses = spec.get("pulses", 8)
         upto = spec.get("upto", pulses)
         states = count_states(n, 1 << n, 0, pulses)
-        top = WORK.y + 82
         if spec.get("chain"):
             state = spec.get("state", states[min(upto, pulses)])
             qvals = [bit_of(state, i) for i in range(n)]
             tvals = t_inputs(state, n) if spec.get("tvals") else None
-            draw_counter_chain(screen, self.fonts, WORK.x + 110, top, n, spec["mode"], qvals, tvals)
-            top += 112 if spec["mode"] == "ripple" else 150
+            draw_counter_chain(screen, self.fonts, WORK.x + 110, top + 20, n, spec["mode"], qvals, tvals)
+            top += 136 if spec["mode"] == "ripple" else 150
         if spec.get("timing"):
             rows_h = 33 if spec.get("chain") else 56
             per_w = 56 if pulses == 8 else 440 // max(1, pulses)
@@ -1463,27 +1466,27 @@ class BasicSequentialPuzzle(BasicGatesPuzzle):
         step, st = self.step, self.st
         kind = step["ff"]
         names = FF_INPUTS[kind]
-        self._intro(screen, step["task"])
-        rect = pygame.Rect(250, 175, 150, 190)
+        y = self._intro(screen, step["task"]) + 10
+        rx = WORK.x + int(WORK.width * 0.42)
+        rect = pygame.Rect(rx, y + 20, 150, 150)
         draw_flipflop(screen, self.fonts, rect, kind, st["q"], dict(zip(names, st["ins"])))
         self._draw_ffout(screen, rect, st["q"])
         for i, py in enumerate(ff_pin_ys(rect, len(names))):
             on = st["ins"][i]
-            self._inline_switch(screen, 150, py, names[i], on, ("fin", i))
-            pygame.draw.line(screen, WIRE_ON if on else WIRE_OFF, (194, py), (rect.x - 36, py), 4)
+            cx = WORK.x + 150
+            self._inline_switch(screen, cx, py, names[i], on, ("fin", i))
+            pygame.draw.line(screen, WIRE_ON if on else WIRE_OFF, (cx + 44, py), (rect.x - 36, py), 4)
         cy = rect.y + int(rect.h * 0.85)
-        self._button(screen, pygame.Rect(60, cy - 18, 130, 36), "CLOCK [SPACE]", ("fclock",), YELLOW)
-        pygame.draw.line(screen, WIRE_OFF, (190, cy), (rect.x - 36, cy), 4)
+        self._button(screen, pygame.Rect(WORK.x + 20, cy - 18, 130, 36), "CLOCK [SPACE]", ("fclock",), YELLOW)
         qtxt = "?" if st["q"] is None else str(st["q"])
         img = self.f_body.render(f"Q = {qtxt}", True, RED if st["q"] is None else (BULB_YELLOW if st["q"] else GREY))
-        screen.blit(img, img.get_rect(center=(rect.right + 70, rect.bottom + 14)))
-        y = 392
+        screen.blit(img, img.get_rect(center=(rect.right + 70, rect.bottom + 22)))
+        ly = rect.bottom + 46
         for line in st["log"]:
-            screen.blit(self.f_tiny.render(line, True, WHITE), (WORK.x + 20, y))
-            y += 20
+            screen.blit(self.f_tiny.render(line, True, WHITE), (WORK.x + 20, ly))
+            ly += 20
         screen.blit(self.f_tiny.render("COMBINATIONS TRIED", True, GREY), (WORK.x + 24, WORK.bottom - 74))
-        combos = input_combos(kind)
-        for i, c in enumerate(combos):
+        for i, c in enumerate(input_combos(kind)):
             self._chip(screen, WORK.x + 80 + i * 100, WORK.bottom - 32, "".join(map(str, c)), c in st["seen"], w=84)
 
     def _draw_fftable(self, screen):
@@ -1512,18 +1515,17 @@ class BasicSequentialPuzzle(BasicGatesPuzzle):
     def _draw_wavefill(self, screen):
         step, st = self.step, self.st
         n = step["periods"]
-        self._intro(screen, step["task"])
+        y = self._intro(screen, step["task"]) + 10
         per_w = min(84, 480 // n)
-        x0, y0, row_h = WORK.x + 80, 178, 58
+        x0, row_h = WORK.x + 80, 50
         rows = [{"name": "CLK", "kind": "clk", "color": YELLOW}] + list(step["signals"])
         rows.append({"name": step["ans_name"], "kind": "out", "init": step["q0"], "vals": st["vals"], "color": GREEN})
-        draw_waveforms(screen, self.fonts, x0, y0, per_w, n, rows, row_h=row_h)
-        by = y0 + len(rows) * row_h + 4
-        screen.blit(self.f_tiny.render(f"{step['ans_name']} after each edge:", True, GREY), (x0 - 56, by - 2))
+        draw_waveforms(screen, self.fonts, x0, y, per_w, n, rows, row_h=row_h)
+        by = y + len(rows) * row_h + 14
+        screen.blit(self.f_tiny.render(f"{step['ans_name']} after each edge:", True, GREY), (WORK.x + 20, by))
         for k in range(n):
-            w = min(per_w - 12, 46)
-            rect = pygame.Rect(0, 0, w, 34)
-            rect.center = (x0 + k * per_w + int(per_w * 0.75), by + 34)
+            rect = pygame.Rect(0, 0, min(per_w - 14, 46), 34)
+            rect.center = (x0 + k * per_w + per_w // 2, by + 30)
             v = st["vals"][k]
             self._cell(screen, rect, "?" if v is None else str(v), k == st["sel"], k in st["bad"], v is not None,
                        GREY if v is None else GREEN)
@@ -1533,9 +1535,11 @@ class BasicSequentialPuzzle(BasicGatesPuzzle):
     def _draw_regplay(self, screen):
         step, st = self.step, self.st
         ctl = step["controls"]
-        self._intro(screen, step["task"])
+        y = self._intro(screen, step["task"]) + 10
+        if "parallel" in ctl:
+            y += 50
         x0 = WORK.x + (190 if "serial" in ctl else 110)
-        y0 = 258
+        y0 = y + 20
         rects = draw_register(screen, self.fonts, x0, y0, st["reg"])
         if "serial" in ctl:
             self._switch(screen, WORK.x + 80, y0 + 31, "SI", st["si"], ("rser",))
@@ -1545,15 +1549,15 @@ class BasicSequentialPuzzle(BasicGatesPuzzle):
         screen.blit(self.f_tiny.render("OUT", True, GREEN), (r.right + 48, r.centery - 8))
         if "parallel" in ctl:
             for i, rc in enumerate(rects):
-                self._chip(screen, rc.centerx, y0 - 52, f"P{i + 1} = {st['par'][i]}", st["par"][i], w=76, h=32)
-                self.buttons.append((pygame.Rect(rc.centerx - 38, y0 - 68, 76, 32), ("rpar", i)))
-                draw_arrow(screen, (rc.centerx, y0 - 34), (rc.centerx, y0 - 2), YELLOW)
-        screen.blit(self.f_tiny.render("bits move RIGHT at every clock pulse  >>>", True, GREY), (x0, y0 + 74))
+                self._chip(screen, rc.centerx, y0 - 30, f"P{i + 1} = {st['par'][i]}", st["par"][i], w=76, h=28)
+                self.buttons.append((pygame.Rect(rc.centerx - 38, y0 - 44, 76, 28), ("rpar", i)))
+        ty = y0 + 84
+        screen.blit(self.f_tiny.render("bits move RIGHT at every clock pulse", True, GREY), (WORK.x + 24, ty))
         out = " ".join(map(str, st["out"][-8:])) if st["out"] else "-"
-        screen.blit(self.f_small.render(f"Clock pulses: {st['clocks']}      Serial output so far: {out}", True, WHITE),
-                    (WORK.x + 24, y0 + 108))
+        screen.blit(self.f_small.render(f"Clock pulses: {st['clocks']}    Serial output: {out}", True, WHITE),
+                    (WORK.x + 24, ty + 26))
         for i, line in enumerate(wrap_text(self.f_small, st["msg"], WORK.width - 48)[:2]):
-            screen.blit(self.f_small.render(line, True, YELLOW), (WORK.x + 24, y0 + 138 + i * 22))
+            screen.blit(self.f_small.render(line, True, YELLOW), (WORK.x + 24, ty + 54 + i * 22))
         bx, by = WORK.x + 20, WORK.bottom - 54
         self._button(screen, pygame.Rect(bx, by, 160, 36), "CLOCK [SPACE]", ("rclock",), YELLOW)
         bx += 172
@@ -1591,34 +1595,32 @@ class BasicSequentialPuzzle(BasicGatesPuzzle):
     def _draw_cntplay(self, screen):
         step, st = self.step, self.st
         n, mode = step["nbits"], step["mode"]
-        self._intro(screen, step["task"])
+        y = self._intro(screen, step["task"]) + 10
         state = st["state"]
         qvals = [bit_of(state, i) for i in range(n)]
         tvals = t_inputs(state, n) if mode == "sync" else None
-        draw_counter_chain(screen, self.fonts, WORK.x + 90, 168, n, mode, qvals, tvals)
-        y = 345
+        top = y + (30 if mode == "sync" else 0)
+        draw_counter_chain(screen, self.fonts, WORK.x + 90, top + 10, n, mode, qvals, tvals)
+        by = top + (190 if mode == "sync" else 150)
         for i in range(n - 1, -1, -1):
             cx = WORK.x + 60 + (n - 1 - i) * 62
-            draw_bulb(screen, cx, y, 20, qvals[i])
-            lab = self.f_small.render(f"Q{i}", True, WHITE)
-            screen.blit(lab, lab.get_rect(center=(cx, y + 36)))
-        screen.blit(self.f_body.render(f"Count = {state}   ({bits_str(state, n)})", True, YELLOW),
-                    (WORK.x + 24, y + 62))
-        for i, line in enumerate(wrap_text(self.f_small, st["msg"], 250)[:4]):
-            screen.blit(self.f_small.render(line, True, GREEN), (WORK.x + 24, y + 92 + i * 22))
+            draw_bulb(screen, cx, by, 18, qvals[i])
+            lab = self.f_tiny.render(f"Q{i}", True, WHITE)
+            screen.blit(lab, lab.get_rect(center=(cx, by + 30)))
+        screen.blit(self.f_body.render(f"Count = {state}  ({bits_str(state, n)})", True, YELLOW),
+                    (WORK.x + 20, by + 52))
+        for i, line in enumerate(wrap_text(self.f_small, st["msg"], 260)[:3]):
+            screen.blit(self.f_small.render(line, True, GREEN), (WORK.x + 20, by + 84 + i * 22))
         if step["show_wave"]:
             window = st["hist"][-7:]
             if len(window) > 1:
-                draw_counter_timing(screen, self.fonts, WORK.x + 330, 300, 44, n, window, mode, row_h=36 if n == 3 else 32)
-            else:
-                screen.blit(self.f_tiny.render("The timing diagram appears after the first pulse.", True, GREY),
-                            (WORK.x + 300, 360))
-        bx, by = WORK.x + 20, WORK.bottom - 54
-        self._button(screen, pygame.Rect(bx, by, 220, 36), "CLOCK PULSE [SPACE]", ("cclock",), YELLOW)
-        self._button(screen, pygame.Rect(bx + 232, by, 120, 36), "RESET [R]", ("creset",), GREY)
+                draw_counter_timing(screen, self.fonts, WORK.x + 330, by - 20, 40, n, window, mode, row_h=30)
+        bx, by2 = WORK.x + 20, WORK.bottom - 54
+        self._button(screen, pygame.Rect(bx, by2, 220, 36), "CLOCK PULSE [SPACE]", ("cclock",), YELLOW)
+        self._button(screen, pygame.Rect(bx + 232, by2, 120, 36), "RESET [R]", ("creset",), GREY)
         if mode == "sync":
             seen = "T2 = 1 seen: " + ("yes" if 2 in st["t_seen"] else "not yet")
-            screen.blit(self.f_tiny.render(seen, True, GREY), (WORK.right - 130, by - 20))
+            screen.blit(self.f_tiny.render(seen, True, GREY), (WORK.right - 130, by2 - 20))
 
     def _draw_exctable(self, screen):
         step, st = self.step, self.st
