@@ -24,6 +24,10 @@
 #   L / U / C              (loop stages) loop the selected cells / undo / clear selection
 #   A B C D                (stretch + read stages) the variable of that name
 #   ENTER                  check / continue          H  hint (press again for more)
+#
+# UI NOTE: this version lays every screen out from the top down (text first,
+# then the map, then the side panel / buttons), and shrinks the map to fit,
+# so nothing can sit on top of anything else. The puzzle LOGIC is unchanged.
 
 import itertools
 import random
@@ -48,7 +52,7 @@ X = 2          # value used for "don't care"
 
 
 # ------------------------------------------------------------------
-# K-MAP ENGINE
+# K-MAP ENGINE  (unchanged)
 # ------------------------------------------------------------------
 def popcount(x):
     return bin(x).count("1")
@@ -201,7 +205,7 @@ def solution_loops(n, vals, mode="ones"):
 def illegal_reason(cells, n, allowed, mode="ones"):
     k = len(cells)
     if k == 0:
-        return "Select some cells first (click them), then loop them."
+        return "Select some cells first (click them), then press LOOP IT."
     if k & (k - 1):
         return (f"A loop must hold 1, 2, 4, 8 or 16 cells. You picked {k}. "
                 "Loops never hold 3, 5, 6 or 7 cells.")
@@ -241,7 +245,7 @@ def check_loops(n, loops, vals, mode):
 
 
 # ------------------------------------------------------------------
-# STAGE DATA
+# STAGE DATA  (logic unchanged - only the wording of hints / captions was simplified)
 # ------------------------------------------------------------------
 def _loop_text(p):
     return p.solution_text()
@@ -310,11 +314,11 @@ def _stage_neighbours():
         "steps": [
             {
                 "kind": "kinspect", "n": 2, "vals": vals2,
-                "task": "Click two cells at a time. Find 2 neighbour pairs and 1 diagonal pair.",
+                "task": "Click two cells, one after the other. Find 2 pairs of neighbours and 1 diagonal pair.",
                 "hints": [
-                    "Click one cell, then a second cell. The panel tells you what you found.",
-                    "Neighbours share an edge (side by side or up and down). A diagonal pair is a corner to corner pair.",
-                    lambda p: "Try cells 10 and 11, then 00 and 10, then the diagonal 00 and 11.",
+                    "Click one cell, then click a second cell. The box on the right tells you what you found.",
+                    "NEIGHBOURS share a side (side by side, or one above the other). A DIAGONAL pair only touches at a corner.",
+                    lambda p: "Try it: click 10 then 11 (neighbours). Click 00 then 10 (neighbours). Click 00 then 11 (diagonal).",
                 ],
             },
             _kmap_choice(
@@ -325,11 +329,11 @@ def _stage_neighbours():
                  ("It is alphabetical order", "alpha"),
                  ("It is a random choice", "random"),
                  ("It just looks nicer", "nice")],
-                "Pick the reason for the Gray-code order.",
-                "This is Gray code: 00, 01, 11, 10. Each step changes one bit, so neighbours stay neighbours.",
+                "Pick the reason for this column order.",
+                "This is called Gray code: 00, 01, 11, 10. Each step changes only one bit, so neighbours stay neighbours.",
                 [
-                    "Compare 01 with 10 in plain counting order. How many bits change?",
-                    "In Gray code each step changes exactly ONE bit. That keeps neighbours one variable apart.",
+                    "Look at 01 and 10 side by side. Two bits change at once (0 to 1 and 1 to 0).",
+                    "In Gray code, each step changes exactly ONE bit. That keeps touching cells one variable apart.",
                     "The answer is: neighbouring columns differ in only one bit.",
                 ],
                 highlight={3, 7, 2, 6},
@@ -339,11 +343,11 @@ def _stage_neighbours():
                 "Both cells in the loop are 1: AB' and AB. Which variable changes between them?",
                 "B",
                 [("A", "A"), ("B", "B")],
-                "Which variable differs between the two cells?",
+                "Which variable is different in the two cells?",
                 "B changes (0 to 1) while A stays 1, so B cancels.",
                 [
-                    "Read the label of each cell: AB' has B = 0 and AB has B = 1.",
-                    "The variable that is different in the two cells is the one that cancels.",
+                    "Look at the label of each cell. AB' has B = 0. AB has B = 1.",
+                    "The letter that is different in the two cells is the one that cancels.",
                     "The answer is B. A stays 1 in both cells.",
                 ],
             ),
@@ -355,8 +359,8 @@ def _stage_neighbours():
                 "Pick the simplified expression.",
                 "AB' + AB = A(B' + B) = A. The variable that changed (B) disappears.",
                 [
-                    "Take out the common letter: A(B' + B).",
-                    "B' + B always equals 1, so only the common letter is left.",
+                    "Take out the letter both cells share: A(B' + B).",
+                    "B' + B always equals 1, so only the shared letter is left.",
                     "The answer is A.",
                 ],
             ),
@@ -376,11 +380,11 @@ def _fill_step(n, ones):
     listing = ", ".join(bits(m, n) for m in sorted(ones))
     return {
         "kind": "kfill", "n": n, "ones": set(ones),
-        "line": f"F = 1 when {names} =  {listing}",
+        "line": f"F = 1 when {names} = {listing}",
         "task": f"Click the cells where F = 1. Read the {names} labels carefully.",
         "hints": [
-            "Each cell sits where its row label and column label meet. Read the row bits first, then the column bits.",
-            "Remember the column order is 00, 01, 11, 10. Column 11 comes BEFORE column 10.",
+            "Each cell sits where its ROW label meets its COLUMN label. Read the row bits first, then the column bits.",
+            "The column order is 00, 01, 11, 10. Column 11 comes BEFORE column 10. Read the labels, do not count cells.",
             lambda p: p.fill_answer_text(),
         ],
     }
@@ -392,7 +396,7 @@ def _pick_step(n, target, prompt):
         "line": prompt,
         "task": "Click the cell with that label.",
         "hints": [
-            "Find the row from the first bits and the column from the last bits.",
+            "The first letters give the ROW label. The last letters give the COLUMN label.",
             "Rows and columns are NOT in counting order. Read the labels, do not count cells.",
             lambda p: p.pick_answer_text(),
         ],
@@ -431,9 +435,9 @@ def _judge(n, ones, loop, verdict, why, hints_extra):
     return _kmap_choice(
         n, vals_from(n, ones), [(frozenset(loop), 0)],
         "Is this loop legal? If not, why?",
-        verdict, labels, "Check size, shape and contents of the highlighted loop.", why,
+        verdict, labels, "Check the size, shape and contents of the highlighted loop.", why,
         [
-            "Check three things: the SIZE (1, 2, 4 or 8?), the SHAPE (a rectangle?) and the CONTENTS (only 1s?).",
+            "Check three things: SIZE (1, 2, 4 or 8 cells?), SHAPE (a rectangle?) and CONTENTS (only 1s?).",
             hints_extra,
             {"ok": "The answer is: legal.", "shape": "The answer is: illegal shape.",
              "size": "The answer is: illegal size.", "zero": "The answer is: illegal, it holds a 0."}[verdict],
@@ -453,22 +457,22 @@ def _stage_legal():
         "steps": [
             _judge(3, {1, 3, 5, 7}, {1, 3, 5, 7}, "ok",
                    "Legal: a 2 x 2 block of 1s, size 4.",
-                   "Count the cells (4 is a power of 2), look at the shape (a square) and check for 0s."),
+                   "Count the cells (4 is a power of 2), look at the shape (a square) and check that there are no 0s."),
             _judge(3, {0, 2, 7}, {0, 7}, "shape",
                    "Illegal shape: the two 1s touch only at a corner (a diagonal). They differ in 3 variables.",
-                   "The cells touch only at a corner. Are corner cells neighbours?"),
+                   "These cells touch only at a corner. Do corner cells count as neighbours?"),
             _judge(4, {0, 1, 3, 7}, {0, 1, 3, 7}, "shape",
                    "Illegal shape: 4 cells, but in an L-shape. A loop must be a rectangle.",
                    "Four cells is a good size, but look at the outline. Is it a rectangle?"),
             _judge(3, {0, 1, 3}, {0, 1, 3}, "size",
                    "Illegal size: 3 cells. Loops come in 1, 2, 4, 8. Use a loop of 2 and a loop of 1 (or two loops of 2).",
-                   "Count the cells. Is that number a power of 2?"),
+                   "Count the cells. Is that number 1, 2, 4 or 8?"),
             _judge(3, {0, 1, 2}, {0, 1, 3, 2}, "zero",
                    "Illegal: the loop of 4 contains cell 011 which is a 0.",
-                   "The size and shape are fine. Look inside the loop. Is every cell a 1?"),
+                   "The size and shape are fine. Look INSIDE the loop. Is every cell a 1?"),
             _judge(3, {0, 2, 4, 6}, {0, 2, 4, 6}, "ok",
                    "Legal! The loop wraps from the right edge to the left edge. That is allowed.",
-                   "The loop touches both edges. Remember the map wraps around."),
+                   "The loop touches both edges. Remember: the map wraps around."),
         ],
         "example": (3, vals_from(3, {0, 1, 3, 2}), [frozenset({0, 1, 2, 3})]),
         "items": [
@@ -485,9 +489,9 @@ def _stretch(n, ones, start, why):
         "task": "Start at the START cell. Double the loop with the buttons until the next "
                 "doubling would swallow a 0. Then press ENTER.",
         "hints": [
-            "Hover over a button to preview the cells it would swallow. "
+            "Point at a button (do not click yet) to preview the cells it would add. "
             "Green = allowed, red = a 0 is in the way.",
-            "Keep every doubling that works. Stop when every button left is blocked by a 0.",
+            "Keep every doubling that works. Stop when every button that is left is blocked by a 0.",
             lambda p: p.stretch_answer_text(),
         ],
     }
@@ -521,10 +525,10 @@ def _stage_stretch():
         ],
         "steps": [
             {"kind": "kdemo", "n": 3, "vals": demo_vals, "frames": _frames_stretch(),
-             "task": "Watch all four views (LEFT / RIGHT), then press ENTER.",
-             "hints": ["Use LEFT and RIGHT to move between the views.",
+             "task": "Watch all four views (LEFT / RIGHT keys), then press ENTER.",
+             "hints": ["Use the LEFT and RIGHT arrow keys (or the buttons at the top) to change view.",
                        "Look at all four views, then press ENTER.",
-                       "Press RIGHT until all four dots are lit, then ENTER."]},
+                       "Press RIGHT until all four dots at the top are lit, then press ENTER."]},
             _stretch(3, {0, 1, 2, 3, 4}, 0,
                      "It stops at 4, not 8: the full map would need cells 5, 6 and 7, which are 0."),
             _stretch(4, set(range(8)), 5,
@@ -549,7 +553,7 @@ def _minterm_fill_step(n, ones):
     step["task"] = "Each m-number is a cell number. Click every cell in the list."
     step["hints"] = [
         "m3 means the cell numbered 3. Write 3 in binary (011), then find that address on the map.",
-        "Use the place values 4, 2, 1 for three letters. For example 6 = 4 + 2 = 110.",
+        "Place values for three letters are 4, 2, 1. For example 6 = 4 + 2 = 110.",
         step["hints"][2],
     ]
     return step
@@ -587,7 +591,7 @@ def _stage_minterms():
         "options": [("AB'C'", "a"), ("ABC'", "b"), ("A'BC", "c"), ("ABC", "d")],
         "correct": "b", "task": "Turn 6 into 3 bits, then write the letters.",
         "ok": "6 = 110, so A = 1, B = 1, C = 0 gives ABC'.",
-        "hints": ["First write 6 in binary with 3 bits.",
+        "hints": ["First write 6 in binary using 3 bits.",
                   "6 = 110, so A = 1, B = 1, C = 0. A 1 stays plain and a 0 gets a bar.",
                   "The answer is ABC'."],
     }
@@ -610,10 +614,10 @@ def _stage_minterms():
         ],
         "steps": [
             {"kind": "kdemo", "n": 3, "vals": demo_vals, "frames": demo,
-             "task": "Watch all four views (LEFT / RIGHT), then press ENTER.",
-             "hints": ["Use LEFT and RIGHT to move between the views.",
+             "task": "Watch all four views (LEFT / RIGHT keys), then press ENTER.",
+             "hints": ["Use the LEFT and RIGHT arrow keys (or the buttons at the top) to change view.",
                        "Look at all four views, then press ENTER.",
-                       "Press RIGHT until all four dots are lit, then ENTER."]},
+                       "Press RIGHT until all four dots at the top are lit, then press ENTER."]},
             q_cell, q_name,
             _minterm_fill_step(3, {0, 3, 5, 6}),
             q_count,
@@ -648,8 +652,8 @@ def _loops_step(n, vals, mode, task, hints, show_terms=False, sevenseg=None):
 
 
 LOOP_HINTS = [
-    "Click all the cells of one loop, then press L (or LOOP IT). Use the biggest legal loops.",
-    "Cover every cell that must be covered using as FEW loops as possible. Loops may overlap.",
+    "Click every cell of ONE loop, then press L (or the LOOP IT button). Make each loop as big as you can.",
+    "Every cell you must cover needs to be inside a loop. Use as FEW loops as you can. Loops may overlap.",
     lambda p: p.solution_text(),
 ]
 
@@ -664,18 +668,18 @@ def _stage_wrap():
         ],
         "steps": [
             {"kind": "kdemo", "n": 4, "vals": vals_from(4, set()), "frames": _frames_wrap(),
-             "task": "Watch all four views (LEFT / RIGHT to move), then press ENTER.",
+             "task": "Watch all four views (LEFT / RIGHT keys), then press ENTER.",
              "hints": [
                  "The demo changes by itself. You can also use the LEFT and RIGHT arrow keys.",
-                 "View all four pictures, then ENTER.",
-                 "Press RIGHT until the dots at the bottom are all lit, then ENTER.",
+                 "Look at all four pictures, then press ENTER.",
+                 "Press RIGHT until all four dots at the top are lit, then press ENTER.",
              ]},
             _loops_step(3, vals_from(3, {0, 2, 4, 5, 6}), "ones",
-                        "Loop all the 1s with the fewest, biggest loops. One loop wraps!", LOOP_HINTS),
+                        "Loop all the 1s with the fewest, biggest loops. One loop wraps around!", LOOP_HINTS),
             _loops_step(4, vals_from(4, {0, 2, 8, 10}), "ones",
-                        "Loop the 1s. Where are the corners?", LOOP_HINTS),
+                        "Loop all the 1s. Where are the four corners?", LOOP_HINTS),
             _loops_step(4, vals_from(4, {0, 1, 2, 3, 8, 9, 10, 11, 13}), "ones",
-                        "Loop the 1s. Top and bottom rows are neighbours.", LOOP_HINTS),
+                        "Loop all the 1s. The top row and bottom row are neighbours.", LOOP_HINTS),
         ],
         "example": (4, vals_from(4, {0, 2, 8, 10}), [frozenset({0, 2, 8, 10})]),
         "items": [
@@ -690,13 +694,13 @@ def _term_step(n, loop, mode, vals, task=None):
     cells = frozenset(loop)
     return {
         "kind": "kterm", "n": n, "loop": cells, "mode": mode, "vals": vals,
-        "task": task or "For each variable choose: stays 1 (A), stays 0 (A'), or changes (drop).",
+        "task": task or "For each letter choose: stays 1 (A), stays 0 (A'), or changes (drop).",
         "hints": [
-            "Look at the loop cells' addresses. For each variable, compare them.",
-            ("A variable that changes is dropped. One that is 1 in every cell is written plain, "
-             "one that is 0 in every cell is written with a bar.") if mode == "sop" else
-            ("POS reads zero-loops inverted: a variable that is 0 in every cell is written plain, "
-             "one that is 1 in every cell gets a bar. A changing variable is dropped."),
+            "Look at the addresses of the loop cells (listed on the right). Check ONE letter at a time.",
+            ("Is the letter the same in every cell? Always 1: pick the plain letter (A). "
+             "Always 0: pick the letter with a bar (A'). It changes: pick drop.") if mode == "sop" else
+            ("This is a loop of 0s, so it works the other way round. Always 0: pick the plain letter (A). "
+             "Always 1: pick the letter with a bar (A'). It changes: pick drop."),
             lambda p: "The term is " + term_str(p.step["loop"], p.step["n"], p.step["mode"]) + ".",
         ],
     }
@@ -710,8 +714,8 @@ def _stage_sop():
     loops_b = [frozenset({0, 1, 2, 3}), frozenset({2, 3, 10, 11})]
     opts_b, ans_b = _expr_options(4, loops_b, "sop", 12)
     sop_hints = [
-        "Read each loop as a product term (AND of letters), then OR the terms together.",
-        "For each loop: a variable that changes is dropped, one stuck at 1 is written plain, one stuck at 0 gets a bar.",
+        "Read each loop as a product term (letters written next to each other), then join the terms with +.",
+        "For each loop: a letter that changes is dropped. A letter that is always 1 stays plain. A letter that is always 0 gets a bar.",
     ]
     return {
         "id": "k7_sop", "title": "Loop to term to SOP", "sub": "reading the loops",
@@ -725,11 +729,11 @@ def _stage_sop():
             _term_step(4, {0, 2, 8, 10}, "sop", vals_from(4, {0, 2, 8, 10})),
             _kmap_choice(3, vals_a, [(l, i) for i, l in enumerate(loops_a)],
                          "Which SOP expression do these two loops give?", ans_a, opts_a,
-                         "Read each loop, then OR the terms.",
+                         "Read each loop, then join the terms with +.",
                          f"F = {ans_a}", sop_hints + [f"The answer is {ans_a}."]),
             _kmap_choice(4, vals_b, [(l, i) for i, l in enumerate(loops_b)],
                          "Which SOP expression do these two loops give?", ans_b, opts_b,
-                         "Read each loop, then OR the terms.",
+                         "Read each loop, then join the terms with +.",
                          f"F = {ans_b}", sop_hints + [f"The answer is {ans_b}."]),
         ],
         "example": (3, vals_a, loops_a),
@@ -773,9 +777,9 @@ def _stage_pos():
     random.Random(5).shuffle(max_opts)
     q_max = _kmap_choice(
         3, pos_vals, [], "The highlighted cell is a 0 (ABC = 101). What is its maxterm?",
-        "ok", max_opts, "Write the OR of all the letters for this 0 cell.",
+        "ok", max_opts, "Write the OR (sum) of all the letters for this 0 cell.",
         "101: A = 1 gets a bar, B = 0 stays plain, C = 1 gets a bar: (A' + B + C') = M5.",
-        ["A maxterm is a SUM (OR) of all the letters. A letter that is 0 stays plain, a 1 gets a bar.",
+        ["A maxterm is a SUM (letters joined with +). A letter that is 0 stays plain, a letter that is 1 gets a bar.",
          "ABC = 101: A is 1 (bar), B is 0 (plain), C is 1 (bar).",
          "The answer is (A' + B + C')."],
         highlight={5})
@@ -799,15 +803,15 @@ def _stage_pos():
         ],
         "steps": [
             {"kind": "kdemo", "n": 3, "vals": f_vals, "frames": demo,
-             "task": "Watch all six views (LEFT / RIGHT), then press ENTER.",
-             "hints": ["Use LEFT and RIGHT to move between the views.",
+             "task": "Watch all six views (LEFT / RIGHT keys), then press ENTER.",
+             "hints": ["Use the LEFT and RIGHT arrow keys (or the buttons at the top) to change view.",
                        "Look at every view, then press ENTER.",
-                       "Press RIGHT until all six dots are lit, then ENTER."]},
+                       "Press RIGHT until all six dots at the top are lit, then press ENTER."]},
             q_max, q_prod,
             _term_step(3, {0, 1}, "pos", vals_from(3, {2, 3, 4, 5, 6, 7}),
-                       "Read this 0-loop as a SUM: stays 0 = letter, stays 1 = letter with a bar, changes = drop."),
+                       "Read this loop of 0s as a SUM: stays 0 = letter, stays 1 = letter with a bar, changes = drop."),
             _term_step(4, {5, 7, 13, 15}, "pos", vals_from(4, set(range(16)) - {5, 7, 13, 15}),
-                       "Read this 0-loop as a SUM. The 0s are the highlighted cells."),
+                       "Read this loop of 0s as a SUM. The 0s are the highlighted cells."),
             _loops_step(3, pos_vals, "zeros",
                         "Loop the 0s this time (the grey cells), with the fewest, biggest loops.",
                         LOOP_HINTS, show_terms=True),
@@ -866,10 +870,10 @@ def _stage_dc():
         ],
         "steps": [
             {"kind": "kdemo", "n": 4, "vals": dc_vals, "frames": demo,
-             "task": "Watch all four views (LEFT / RIGHT), then press ENTER.",
-             "hints": ["Use LEFT and RIGHT to move between the views.",
+             "task": "Watch all four views (LEFT / RIGHT keys), then press ENTER.",
+             "hints": ["Use the LEFT and RIGHT arrow keys (or the buttons at the top) to change view.",
                        "Look at all four views, then press ENTER.",
-                       "Press RIGHT until all four dots are lit, then ENTER."]},
+                       "Press RIGHT until all four dots at the top are lit, then press ENTER."]},
             _loops_step(4, dc_vals, "ones",
                         "Loop the 1s. Use the X's only if they make a loop bigger.",
                         LOOP_HINTS + [], show_terms=True),
@@ -894,9 +898,9 @@ def _stage_dc():
                         LOOP_HINTS, show_terms=True, sevenseg="e"),
             _kmap_choice(4, seg_vals, [(l, i) for i, l in enumerate(seg_loops)],
                          "Segment e of the display is lit by which expression?", "ok", seg_opts,
-                         "Read each loop and OR the terms.",
+                         "Read each loop, then join the terms with +.",
                          "e = B'D' + CD'. The X cells made both loops bigger.",
-                         ["Read each loop as a product term, then OR them.",
+                         ["Read each loop as a product term, then join them with +.",
                           "The corner loop gives B'D'. The loop down the CD' column gives CD'.",
                           "The answer is B'D' + CD'."]),
         ],
@@ -928,6 +932,7 @@ def draw_kmap(screen, fonts, origin, cell, n, vals=None, selected=(), loops=(),
     rb = n - cb
     rects = {}
 
+    # labels sit in the margin above / left of the grid
     corner = f"{VARS[:rb]}\\{VARS[rb:n]}"
     img = f_tiny.render(corner, True, CYAN)
     screen.blit(img, img.get_rect(midright=(x0 - 8, y0 - 14)))
@@ -962,11 +967,16 @@ def draw_kmap(screen, fonts, origin, cell, n, vals=None, selected=(), loops=(),
                 img = f_small.render(marks[m], True, WHITE)
                 screen.blit(img, img.get_rect(center=rect.center))
 
+    # loops: a soft coloured tint plus a coloured outline, so they are easy to see
     for cells, idx in loops:
         color = LOOP_COLORS[idx % len(LOOP_COLORS)]
         inset = 3 + (idx % 3) * 3
         for m in cells:
-            rect = rects[m].inflate(-2 * inset, -2 * inset)
+            full = rects[m]
+            tint = pygame.Surface(full.size, pygame.SRCALPHA)
+            tint.fill((color[0], color[1], color[2], 34))
+            screen.blit(tint, full.topleft)
+            rect = full.inflate(-2 * inset, -2 * inset)
             pygame.draw.rect(screen, color, rect, 3, border_radius=6)
     for m in selected:
         pygame.draw.rect(screen, YELLOW, rects[m], 4)
@@ -999,7 +1009,7 @@ def draw_seven_seg(screen, x, y, lit, size=1.0):
 # THE PUZZLE
 # ------------------------------------------------------------------
 class BasicKarnaughPuzzle(BasicGatesPuzzle):
-    """Eight-stage beginner course on Karnaugh maps (SOP, POS, don't cares)."""
+    """Nine-stage beginner course on Karnaugh maps (SOP, POS, don't cares)."""
 
     COURSE_TITLE = "BASIC LEVEL  -  KARNAUGH MAPS"
     LEGEND_EXTRA = dict(BasicGatesPuzzle.LEGEND_EXTRA, **{
@@ -1011,6 +1021,11 @@ class BasicKarnaughPuzzle(BasicGatesPuzzle):
         "kterm": "click a choice or press A B C D to cycle",
         "kdemo": "LEFT / RIGHT to move, ENTER when you've seen all",
     })
+
+    # ---- layout constants (all screens are built top-down from these) ----
+    PAD = 20            # left / right margin inside WORK
+    LABEL_GAP = 30      # room above the grid for the column labels
+    FOOT = 12           # gap kept free at the very bottom
 
     def _make_stages(self):
         return build_kmap_stages()
@@ -1038,7 +1053,7 @@ class BasicKarnaughPuzzle(BasicGatesPuzzle):
         elif kind == "kstretch":
             st.update(free=0, blocked=set(),
                       info="Press a button (or its letter) to double the loop. "
-                           "Hover over a button to preview.")
+                           "Point at a button to preview.")
         elif kind == "kterm":
             st["states"] = [None] * n
         elif kind == "kdemo":
@@ -1053,7 +1068,7 @@ class BasicKarnaughPuzzle(BasicGatesPuzzle):
         parts = []
         for i, loop in enumerate(loops):
             parts.append(f"Loop {i + 1}: " + ", ".join(bits(m, n) for m in sorted(loop)))
-        return "One answer. " + ".  ".join(parts)
+        return "One possible answer.  " + ".  ".join(parts) + "."
 
     def fill_answer_text(self):
         n = self.step["n"]
@@ -1063,32 +1078,31 @@ class BasicKarnaughPuzzle(BasicGatesPuzzle):
             rb = n - col_bits(n)
             cells.append(f"row {format(row_codes(n)[r], f'0{rb}b')} / column "
                          f"{format(col_codes(n)[c], f'0{col_bits(n)}b')}")
-        return "The 1-cells are at: " + "; ".join(cells) + "."
+        return "Click these cells: " + "; ".join(cells) + "."
 
     def pick_answer_text(self):
         n = self.step["n"]
         r, c = minterm_cell(n, self.step["target"])
         rb = n - col_bits(n)
-        return (f"Row {format(row_codes(n)[r], f'0{rb}b')}, column "
+        return (f"Click row {format(row_codes(n)[r], f'0{rb}b')}, column "
                 f"{format(col_codes(n)[c], f'0{col_bits(n)}b')}.")
 
     def stretch_answer_text(self):
         step = self.step
         n, start = step["n"], step["start"]
-        vals = vals_from(n, step["ones"])
         allowed = set(step["ones"])
         primes = [p for p in prime_loops(n, allowed, allowed) if start in p]
         best = max(primes, key=len)
         free = analyse(best, n)["free"]
         letters = [VARS[i] for i in range(n) if free & (1 << (n - 1 - i))]
-        return "Stretch across " + " and ".join(letters) + " (press those letters)."
+        return "Press these letters: " + " and ".join(letters) + ". Then press ENTER."
 
     def _loop_cells(self):
         st, step = self.st, self.step
         start, free = step["start"], st["free"]
         return cube_cells(start, free)
 
-    # ---------------- events ----------------
+    # ---------------- events (unchanged) ----------------
     def _on_key(self, event):
         key = event.key
         if self.phase == "done" or key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_h):
@@ -1266,7 +1280,7 @@ class BasicKarnaughPuzzle(BasicGatesPuzzle):
                       f"{name} changes inside the loop, so {name} disappears from the formula.")
         self._say("", True)
 
-    # ---------------- checking ----------------
+    # ---------------- checking (unchanged) ----------------
     def _check(self):
         step, st = self.step, self.st
         kind = step["kind"]
@@ -1312,7 +1326,7 @@ class BasicKarnaughPuzzle(BasicGatesPuzzle):
             elif st["states"] == want:
                 self._right("Term: " + term_str(step["loop"], n, step["mode"]) + ".")
             else:
-                self._wrong("Not quite. Compare the loop's cells: which variables stay the same, which change?")
+                self._wrong("Not quite. Compare the loop's cells: which letters stay the same, which change?")
         elif kind == "kdemo":
             if st["seen"] >= len(step["frames"]):
                 self._advance("")
@@ -1338,7 +1352,7 @@ class BasicKarnaughPuzzle(BasicGatesPuzzle):
                     out.append("bar" if one else "plain")
         return out
 
-    # ---------------- update ----------------
+    # ---------------- update (unchanged) ----------------
     def update(self, dt):
         super().update(dt)
         if self.phase == "play" and self.step["kind"] == "kdemo":
@@ -1349,7 +1363,9 @@ class BasicKarnaughPuzzle(BasicGatesPuzzle):
                 self.st["frame"] = (self.st["frame"] + 1) % frames
                 self.st["seen"] = max(self.st["seen"], self.st["frame"] + 1)
 
-    # ---------------- drawing ----------------
+    # ------------------------------------------------------------------
+    # DRAWING HELPERS  (top-down layout, map shrinks to fit)
+    # ------------------------------------------------------------------
     def _cell_size(self, n, bottom=None, top=None, maxw=None):
         rows = len(row_codes(n))
         cols = len(col_codes(n))
@@ -1357,29 +1373,40 @@ class BasicKarnaughPuzzle(BasicGatesPuzzle):
         if bottom is not None and top is not None:
             size = min(size, max(30, (bottom - top) // rows))
         if maxw:
-            size = min(size, maxw // cols)
+            size = min(size, max(30, maxw // cols))
         return size
 
     def _map_origin(self, n, cell, top=None):
-        cols = len(col_codes(n))
         x0 = WORK.x + 78
         y0 = WORK.y + 112 if top is None else top
         return x0, y0
-
-    def _intro_lines(self, text, y=None):
-        y = WORK.y + 14 if y is None else y
-        for line in wrap_text(self.f_small, text, WORK.width - 40)[:2]:
-            screen_img = self.f_small.render(line, True, CYAN)
-            self._screen.blit(screen_img, (WORK.x + 20, y))
-            y += 22
 
     def draw(self, screen):
         self._screen = screen
         super().draw(screen)
 
-    def _map(self, screen, n, **kw):
-        cell = self._cell_size(n)
-        origin = self._map_origin(n, cell)
+    def _text_block(self, screen, text, y, font, color, x=None, width=None, max_lines=3, gap=2):
+        """Draw wrapped text from y downwards. Returns the y just below the text."""
+        x = WORK.x + self.PAD if x is None else x
+        width = WORK.width - 2 * self.PAD if width is None else width
+        lh = font.get_linesize() + gap
+        for line in wrap_text(font, text, width)[:max_lines]:
+            screen.blit(font.render(line, True, color), (x, y))
+            y += lh
+        return y
+
+    def _intro_lines(self, text, y=None):
+        """The instruction line(s) at the top of a screen. Returns the y below them."""
+        y = WORK.y + 12 if y is None else y
+        y = self._text_block(screen=self._screen, text=text, y=y, font=self.f_small,
+                             color=CYAN, max_lines=3, gap=2)
+        return y + 6
+
+    def _map(self, screen, n, top=None, bottom=None, panel=0, **kw):
+        """Draw a map that fits between `top` and `bottom` and leaves `panel` px free on the right."""
+        maxw = WORK.width - 78 - self.PAD - panel
+        cell = self._cell_size(n, bottom=bottom, top=top, maxw=maxw)
+        origin = self._map_origin(n, cell, top)
         rects = draw_kmap(screen, self.fonts, origin, cell, n, **kw)
         return rects, origin, cell
 
@@ -1387,98 +1414,131 @@ class BasicKarnaughPuzzle(BasicGatesPuzzle):
         for m, rect in rects.items():
             self.buttons.append((rect, ("kcell", m)))
 
-    def _info_box(self, screen, x, y, w, lines, color=WHITE):
+    def _info_box(self, screen, x, y, w, lines, color=WHITE, limit=None, font=None):
+        """Wrapped lines in a side panel. Stops before `limit` so it never runs into things below."""
+        font = font or self.f_small
+        lh = font.get_linesize() + 2
         for line in lines:
-            for sub in wrap_text(self.f_small, line, w):
-                screen.blit(self.f_small.render(sub, True, color), (x, y))
-                y += 22
+            for sub in wrap_text(font, line, w):
+                if limit is not None and y + lh > limit:
+                    return y
+                screen.blit(font.render(sub, True, color), (x, y))
+                y += lh
             y += 4
         return y
 
+    # ---------------- kinspect ----------------
     def _draw_kinspect(self, screen):
         step, st = self.step, self.st
         n = step["n"]
-        self._intro_lines(step["task"])
-        rects, origin, cell = self._map(screen, n, vals=step["vals"], selected=st["sel"],
-                                        cursor=st["cursor"])
+        y = self._intro_lines(step["task"])
+        bottom = WORK.bottom - 44
+        rects, origin, cell = self._map(screen, n, top=y + self.LABEL_GAP, bottom=bottom, panel=230,
+                                        vals=step["vals"], selected=st["sel"], cursor=st["cursor"])
         self._register_cells(rects)
-        x = origin[0] + 2 * cell + 40
-        self._info_box(screen, x, origin[1] - 10, WORK.right - x - 14, st["lines"])
+        x = origin[0] + len(col_codes(n)) * cell + 40
+        self._info_box(screen, x, origin[1] - 10, WORK.right - x - 14, st["lines"], limit=bottom)
         screen.blit(self.f_small.render(
-            f"Neighbour pairs found: {len(st['nb'])}/2     Diagonal pairs found: {len(st['diag'])}/1",
-            True, GREEN), (WORK.x + 20, WORK.bottom - 34))
+            f"Neighbour pairs found: {len(st['nb'])}/2      Diagonal pairs found: {len(st['diag'])}/1",
+            True, GREEN), (WORK.x + self.PAD, WORK.bottom - 32))
 
+    # ---------------- kfill ----------------
     def _draw_kfill(self, screen):
         step, st = self.step, self.st
         n = step["n"]
-        self._intro_lines(step["task"])
-        screen.blit(self.f_body.render(step["line"], True, YELLOW), (WORK.x + 20, WORK.y + 62))
-        rects, origin, cell = self._map(screen, n, vals=st["cells"], cursor=st["cursor"])
+        y = self._intro_lines(step["task"])
+        y = self._text_block(screen, step["line"], y, self.f_body, YELLOW, max_lines=2, gap=2) + 2
+        bottom = WORK.bottom - 44
+        rects, origin, cell = self._map(screen, n, top=y + self.LABEL_GAP, bottom=bottom,
+                                        vals=st["cells"], cursor=st["cursor"])
         self._register_cells(rects)
         count = sum(st["cells"].values())
         screen.blit(self.f_small.render(
             f"Cells set to 1: {count} / {len(step['ones'])}", True,
-            GREEN if count == len(step["ones"]) else WHITE), (WORK.x + 20, WORK.bottom - 34))
+            GREEN if count == len(step["ones"]) else WHITE), (WORK.x + self.PAD, WORK.bottom - 32))
 
+    # ---------------- kpick ----------------
     def _draw_kpick(self, screen):
         step, st = self.step, self.st
         n = step["n"]
-        self._intro_lines(step["task"])
-        screen.blit(self.f_body.render(step["line"], True, YELLOW), (WORK.x + 20, WORK.y + 62))
+        y = self._intro_lines(step["task"])
+        y = self._text_block(screen, step["line"], y, self.f_body, YELLOW, max_lines=2, gap=2) + 2
         marks = {st["pick"]: "?"} if st["pick"] is not None else None
-        rects, origin, cell = self._map(screen, n, vals=None,
+        rects, origin, cell = self._map(screen, n, top=y + self.LABEL_GAP, bottom=WORK.bottom - self.FOOT - 6,
+                                        vals=None,
                                         selected=[st["pick"]] if st["pick"] is not None else [],
                                         cursor=st["cursor"], marks=marks)
         self._register_cells(rects)
 
+    # ---------------- kloops ----------------
     def _draw_kloops(self, screen):
         step, st = self.step, self.st
         n = step["n"]
         mode = step["mode"]
-        self._intro_lines(step["task"])
+        y = self._intro_lines(step["task"])
         loops = [(l, i) for i, l in enumerate(st["loops"])]
-        rects, origin, cell = self._map(screen, n, vals=step["vals"], selected=st["sel"],
+        by = WORK.bottom - 52                     # button row
+        sel_y = by - 24                           # "Selected cells" line
+        map_bottom = sel_y - 8
+        rects, origin, cell = self._map(screen, n, top=y + self.LABEL_GAP, bottom=map_bottom, panel=230,
+                                        vals=step["vals"], selected=st["sel"],
                                         loops=loops, cursor=st["cursor"])
         self._register_cells(rects)
+
+        # side panel
         x = origin[0] + len(col_codes(n)) * cell + 26
         w = WORK.right - x - 12
-        y = origin[1] - 10
+        py = origin[1] - 10
         if step.get("sevenseg"):
-            draw_seven_seg(screen, x + 4, y, step["sevenseg"], 0.8)
-            screen.blit(self.f_tiny.render(f"segment {step['sevenseg']}", True, GREY), (x + 50, y + 22))
-            y += 66
-        screen.blit(self.f_small.render(f"Loops of {'1s' if mode == 'ones' else '0s'}:", True, CYAN), (x, y))
-        y += 24
+            draw_seven_seg(screen, x + 4, py, step["sevenseg"], 0.8)
+            screen.blit(self.f_tiny.render(f"segment {step['sevenseg']}", True, GREY), (x + 56, py + 22))
+            py += 66
+        screen.blit(self.f_small.render(f"Loops of {'1s' if mode == 'ones' else '0s'}:", True, CYAN), (x, py))
+        py += 26
         if not st["loops"]:
-            screen.blit(self.f_tiny.render("(none yet)", True, GREY), (x, y))
+            screen.blit(self.f_tiny.render("(none yet)", True, GREY), (x, py))
+            py += 18
         for i, loop in enumerate(st["loops"]):
+            if py > sel_y - 30:
+                break
             color = LOOP_COLORS[i % len(LOOP_COLORS)]
-            pygame.draw.rect(screen, color, (x, y + 3, 14, 14), border_radius=3)
+            pygame.draw.rect(screen, color, (x, py + 3, 14, 14), border_radius=3)
             text = f"{len(loop)} cells"
             if step.get("show_terms"):
                 text += "  =  " + term_str(loop, n, "sop" if mode == "ones" else "pos")
-            screen.blit(self.f_small.render(text, True, WHITE), (x + 22, y))
-            y += 24
-        by = WORK.bottom - 54
-        bx = WORK.x + 20
+            screen.blit(self.f_small.render(text, True, WHITE), (x + 22, py))
+            py += 24
+        if any(v == X for v in step["vals"].values()) and py < sel_y - 24:
+            self._info_box(screen, x, py + 4, w,
+                           ["X = don't care. Use it only to make a loop bigger."],
+                           color=YELLOW, limit=sel_y, font=self.f_tiny)
+
+        # status line + buttons
+        sel = self.f_tiny.render(
+            f"Selected cells: {len(st['sel'])}   (click a selected cell again to unselect it)", True, GREY)
+        screen.blit(sel, (WORK.x + self.PAD, sel_y))
+        bx = WORK.x + self.PAD
+        bw = min(130, (WORK.width - 2 * self.PAD - 24) // 3)
         for label, act, col in (("LOOP IT [L]", ("kloop",), GREEN), ("UNDO [U]", ("kundo",), YELLOW),
                                 ("CLEAR [C]", ("kclear",), GREY)):
-            rect = pygame.Rect(bx, by, 130, 36)
+            rect = pygame.Rect(bx, by, bw, 36)
             self._button(screen, rect, label, act, col)
-            bx += 142
-        sel = self.f_tiny.render(f"Selected cells: {len(st['sel'])}", True, GREY)
-        screen.blit(sel, (WORK.x + 20, WORK.bottom - 78))
+            bx += bw + 12
 
+    # ---------------- kstretch ----------------
     def _draw_kstretch(self, screen):
         step, st = self.step, self.st
         n = step["n"]
         start = step["start"]
-        self._intro_lines(step["task"])
+        y = self._intro_lines(step["task"])
         cells = self._loop_cells()
         vals = vals_from(n, step["ones"])
 
-        bx, by = WORK.x + 20, WORK.bottom - 54
-        btns = [pygame.Rect(bx + i * 146, by, 138, 36) for i in range(n)]
+        by = WORK.bottom - 52
+        legend_y = by - 22
+        map_bottom = legend_y - 8
+        bw = min(138, (WORK.width - 2 * self.PAD - (n - 1) * 8) // n)
+        btns = [pygame.Rect(WORK.x + self.PAD + i * (bw + 8), by, bw, 36) for i in range(n)]
 
         # hover preview: which cells would this doubling swallow?
         highlight, bad = set(), set(st["blocked"])
@@ -1490,8 +1550,8 @@ class BasicKarnaughPuzzle(BasicGatesPuzzle):
                 highlight = new & set(step["ones"])
                 bad = new - set(step["ones"])
 
-        rects, origin, cell = self._map(screen, n, vals=vals, loops=[(cells, 0)],
-                                        highlight=highlight, bad=bad)
+        rects, origin, cell = self._map(screen, n, top=y + self.LABEL_GAP, bottom=map_bottom, panel=240,
+                                        vals=vals, loops=[(cells, 0)], highlight=highlight, bad=bad)
         flag = self.f_tiny.render("START", True, CYAN)
         screen.blit(flag, flag.get_rect(midbottom=(rects[start].centerx, rects[start].bottom - 2)))
 
@@ -1502,43 +1562,55 @@ class BasicKarnaughPuzzle(BasicGatesPuzzle):
         lines = [f"Cells in the loop: {len(cells)}",
                  f"Formula for this loop: {term_str(cells, n)}",
                  f"Letters left: {left}  (one cell alone needs all {n})"]
-        y = self._info_box(screen, x, origin[1] - 10, w, lines, WHITE)
-        self._info_box(screen, x, y + 6, w, [st["info"]], YELLOW)
+        py = self._info_box(screen, x, origin[1] - 10, w, lines, WHITE, limit=map_bottom)
+        self._info_box(screen, x, py + 6, w, [st["info"]], YELLOW, limit=map_bottom)
 
         screen.blit(self.f_tiny.render(
-            "Green preview = allowed.  Red = a 0 is in the way.", True, GREY),
-            (WORK.x + 20, by - 22))
+            "Green preview = allowed.   Red = a 0 is in the way.", True, GREY),
+            (WORK.x + self.PAD, legend_y))
         for i, rect in enumerate(btns):
             on = bool(st["free"] & (1 << (n - 1 - i)))
             label = f"{'Undo' if on else 'Double'} {VARS[i]}"
             self._button(screen, rect, label, ("kstretch", i), YELLOW if on else CYAN)
 
+    # ---------------- kterm ----------------
     def _draw_kterm(self, screen):
         step, st = self.step, self.st
         n = step["n"]
         mode = step["mode"]
-        self._intro_lines(step["task"])
+        y = self._intro_lines(step["task"])
         loop = step["loop"]
-        rects, origin, cell = self._map(screen, n, vals=step["vals"], loops=[(loop, 0)])
+        bottom = WORK.bottom - self.FOOT
+        rects, origin, cell = self._map(screen, n, top=y + self.LABEL_GAP, bottom=bottom, panel=270,
+                                        vals=step["vals"], loops=[(loop, 0)])
         x = origin[0] + len(col_codes(n)) * cell + 26
         w = WORK.right - x - 10
         addr = "Loop cells:  " + ",  ".join(bits(m, n) for m in sorted(loop))
-        y = self._info_box(screen, x, origin[1] - 10, w, [addr], GREY)
+        py = self._info_box(screen, x, origin[1] - 10, w, [addr], GREY, limit=bottom)
+
+        # column headings so the three buttons explain themselves
+        heads = ["stays 1", "stays 0", "changes"] if mode == "sop" else ["stays 0", "stays 1", "changes"]
+        for j, text in enumerate(heads):
+            img = self.f_tiny.render(text, True, CYAN)
+            screen.blit(img, img.get_rect(midtop=(x + 34 + j * 62 + 28, py)))
+        py += 20
+
+        avail = bottom - py - 36          # keep room for the "Term:" line
+        rowh = max(36, min(42, avail // max(1, n)))
         order = [("plain", ""), ("bar", "'"), ("drop", None)]
-        y += 4
         for i in range(n):
             name = VARS[i]
-            screen.blit(self.f_body.render(name, True, YELLOW), (x, y + 6))
+            screen.blit(self.f_body.render(name, True, YELLOW), (x, py + 4))
             for j, (state, suffix) in enumerate(order):
                 label = name + suffix if suffix is not None else "drop"
-                rect = pygame.Rect(x + 34 + j * 62, y, 56, 34)
+                rect = pygame.Rect(x + 34 + j * 62, py, 56, rowh - 6)
                 sel = st["states"][i] == state
                 pygame.draw.rect(screen, (30, 70, 56) if sel else (20, 34, 50), rect, border_radius=6)
                 pygame.draw.rect(screen, GREEN if sel else GREY, rect, 2, border_radius=6)
                 img = self.f_small.render(label, True, WHITE)
                 screen.blit(img, img.get_rect(center=rect.center))
                 self.buttons.append((rect, ("kstate", i, state)))
-            y += 42
+            py += rowh
         lits = []
         for i in range(n):
             s = st["states"][i]
@@ -1552,15 +1624,47 @@ class BasicKarnaughPuzzle(BasicGatesPuzzle):
             text = "Term:  " + ("".join(lits) if lits else "1")
         else:
             text = "Sum:  (" + " + ".join(lits) + ")" if lits else "Sum:  0"
-        screen.blit(self.f_body.render(text, True, GREEN), (x, y + 8))
+        screen.blit(self.f_body.render(text, True, GREEN), (x, py + 6))
 
+    # ---------------- kdemo ----------------
     def _draw_kdemo(self, screen):
         step, st = self.step, self.st
         n = step["n"]
         frame = step["frames"][st["frame"]]
         loops = [(l, i) for l, i in frame.get("loops", [])]
-        rects, origin, cell = self._map(screen, n, vals=step["vals"],
-                                        highlight=frame.get("cells", ()), loops=loops,
+
+        # header: back button, progress dots, next button, then one short instruction line
+        total = len(step["frames"])
+        for i in range(total):
+            cx = WORK.centerx - (total - 1) * 14 + i * 28
+            if i == st["frame"]:
+                pygame.draw.circle(screen, CYAN, (cx, WORK.y + 24), 8)
+            elif i < st["seen"]:
+                pygame.draw.circle(screen, GREEN, (cx, WORK.y + 24), 6)
+            else:
+                pygame.draw.circle(screen, GREY, (cx, WORK.y + 24), 6, 2)
+        for label, delta, bx in (("< BACK", -1, WORK.x + self.PAD), ("NEXT >", 1, WORK.right - self.PAD - 110)):
+            rect = pygame.Rect(bx, WORK.y + 8, 110, 32)
+            self._button(screen, rect, label, ("kframe", delta), CYAN)
+        task = self.f_tiny.render(f"View {st['frame'] + 1} of {total}  -  {step['task']}", True, GREY)
+        screen.blit(task, task.get_rect(midtop=(WORK.centerx, WORK.y + 48)))
+
+        # caption box at the bottom (measured first, so the map can stay clear of it)
+        cap_font = self.f_body
+        cap_lines = wrap_text(cap_font, frame["caption"], WORK.width - 2 * self.PAD - 16)
+        if len(cap_lines) > 4:
+            cap_font = self.f_small
+            cap_lines = wrap_text(cap_font, frame["caption"], WORK.width - 2 * self.PAD - 16)
+        cap_lines = cap_lines[:5]
+        lh = cap_font.get_linesize() + 2
+        box_h = lh * len(cap_lines) + 16
+        box = pygame.Rect(WORK.x + 10, WORK.bottom - self.FOOT - box_h, WORK.width - 20, box_h)
+
+        # map between the header and the caption box
+        top = WORK.y + 112
+        map_bottom = box.y - 36            # leaves room for the "wraps" arrows under the map
+        rects, origin, cell = self._map(screen, n, top=top, bottom=map_bottom,
+                                        vals=step["vals"], highlight=frame.get("cells", ()), loops=loops,
                                         bad=frame.get("bad", ()), nums=frame.get("nums", False),
                                         marks=frame.get("marks"))
         wrap = frame.get("wrap")
@@ -1573,25 +1677,16 @@ class BasicKarnaughPuzzle(BasicGatesPuzzle):
             screen.blit(self.f_tiny.render("wraps", True, YELLOW), (origin[0] + cols * cell + 6, y - 20))
         elif wrap == "v":
             x = origin[0] + cell // 2
-            pygame.draw.line(screen, YELLOW, (x, origin[1] - 40), (x, origin[1] - 24), 3)
-            pygame.draw.line(screen, YELLOW, (x, origin[1] + rows * cell + 4), (x, origin[1] + rows * cell + 22), 3)
+            pygame.draw.line(screen, YELLOW, (x, origin[1] - 44), (x, origin[1] - 30), 3)
+            pygame.draw.line(screen, YELLOW, (x, origin[1] + rows * cell + 4), (x, origin[1] + rows * cell + 20), 3)
             screen.blit(self.f_tiny.render("wraps", True, YELLOW), (x + 8, origin[1] + rows * cell + 6))
-        y = WORK.bottom - 112
-        for line in wrap_text(self.f_body, frame["caption"], WORK.width - 40)[:4]:
-            screen.blit(self.f_body.render(line, True, WHITE), (WORK.x + 20, y))
-            y += 26
-        total = len(step["frames"])
-        for i in range(total):
-            cx = WORK.centerx - (total - 1) * 14 + i * 28
-            if i == st["frame"]:
-                pygame.draw.circle(screen, CYAN, (cx, WORK.y + 24), 8)
-            elif i < st["seen"]:
-                pygame.draw.circle(screen, GREEN, (cx, WORK.y + 24), 6)
-            else:
-                pygame.draw.circle(screen, GREY, (cx, WORK.y + 24), 6, 2)
-        for label, delta, bx in (("< BACK", -1, WORK.x + 20), ("NEXT >", 1, WORK.right - 130)):
-            rect = pygame.Rect(bx, WORK.y + 8, 110, 32)
-            self._button(screen, rect, label, ("kframe", delta), CYAN)
+
+        pygame.draw.rect(screen, (16, 28, 42), box, border_radius=8)
+        pygame.draw.rect(screen, (60, 90, 112), box, 1, border_radius=8)
+        ty = box.y + 8
+        for line in cap_lines:
+            screen.blit(cap_font.render(line, True, WHITE), (box.x + 8, ty))
+            ty += lh
 
     def _on_action_frame(self, delta):
         st = self.st
@@ -1600,11 +1695,12 @@ class BasicKarnaughPuzzle(BasicGatesPuzzle):
         st["seen"] = max(st["seen"], st["frame"] + 1)
         self.demo_clock = 0.0
 
+    # ---------------- map shown inside multiple-choice questions ----------------
     def _draw_extra_visual(self, screen, step, top, bottom):
         if step["visual"] == "kmap":
             n = step["kn"]
-            rows = len(row_codes(n))
-            cell = self._cell_size(n, bottom=bottom - 10, top=top + 34)
+            maxw = WORK.width - 78 - self.PAD - 40
+            cell = self._cell_size(n, bottom=bottom - 10, top=top + 34, maxw=maxw)
             width = len(col_codes(n)) * cell
             origin = (WORK.centerx - width // 2 + 20, top + 34)
             draw_kmap(screen, self.fonts, origin, cell, n, vals=step["kvals"],
@@ -1616,35 +1712,61 @@ class BasicKarnaughPuzzle(BasicGatesPuzzle):
         pygame.draw.rect(screen, PANEL, FULL, border_radius=10)
         pygame.draw.rect(screen, GREEN, FULL, 3, border_radius=10)
         n_stage = self.stage_i + 1
-        screen.blit(self.f_big.render(f"STAGE {n_stage} COMPLETE", True, GREEN), (FULL.x + 24, FULL.y + 14))
+        title = self.f_big.render(f"STAGE {n_stage} COMPLETE", True, GREEN)
+        screen.blit(title, (FULL.x + 24, FULL.y + 14))
+        sub_y = FULL.y + 14 + title.get_height() + 6
         screen.blit(self.f_body.render(f"{stage['title']}  -  {stage['sub']}", True, WHITE),
-                    (FULL.x + 24, FULL.y + 62))
+                    (FULL.x + 24, sub_y))
+        content_top = sub_y + self.f_body.get_linesize() + 14
 
+        # footer first (so everything above can be measured against it)
+        last = self.stage_i >= len(self.stages) - 1
+        btn_w = 210
+        foot_lines = wrap_text(self.f_small,
+                               "Saved to NOTEBOOK [N]  >  TEST THE LOGIC  >  MY BASIC NOTES",
+                               FULL.width - 48 - btn_w - 16)
+        foot_lh = self.f_small.get_linesize() + 2
+        foot_y = FULL.bottom - 16 - foot_lh * len(foot_lines)
+        for i, line in enumerate(foot_lines):
+            screen.blit(self.f_small.render(line, True, YELLOW), (FULL.x + 24, foot_y + i * foot_lh))
+        rect = pygame.Rect(FULL.right - btn_w - 20, FULL.bottom - 54, btn_w, 38)
+        self._button(screen, rect, "FINISH LEVEL" if last else "NEXT STAGE  [ENTER]", ("next",), GREEN)
+        content_bottom = min(foot_y, rect.y) - 10
+
+        # example map on the left, shrunk to fit
         n, vals, loops = stage["example"]
+        rows = len(row_codes(n))
+        cols = len(col_codes(n))
         cell = {2: 70, 3: 60, 4: 52}[n]
-        origin = (FULL.x + 90, FULL.y + 140)
+        cell = min(cell, max(30, (content_bottom - (content_top + self.LABEL_GAP)) // rows))
+        origin = (FULL.x + 90, content_top + self.LABEL_GAP)
         draw_kmap(screen, self.fonts, origin, cell, n, vals=vals,
                   loops=[(l, i) for i, l in enumerate(loops)])
 
-        rx = FULL.x + 390
+        # notes on the right: pick the biggest font that fits
+        rx = max(FULL.x + 390, origin[0] + cols * cell + 40)
         rw = FULL.right - rx - 24
-        y = FULL.y + 104
+        avail = content_bottom - content_top
+
+        def measure(font):
+            lh = font.get_linesize() + 1
+            h = 0
+            for label, text in stage["items"]:
+                h += lh + 2 + len(wrap_text(font, text, rw)) * lh + 8
+            return h
+
+        font = self.f_small if measure(self.f_small) <= avail else self.f_tiny
+        lh = font.get_linesize() + 1
+        y = content_top
         for label, text in stage["items"]:
-            screen.blit(self.f_small.render(label, True, CYAN), (rx, y))
-            y += 24
-            for line in wrap_text(self.f_small, text, rw):
-                screen.blit(self.f_small.render(line, True, WHITE), (rx, y))
-                y += 23
-            y += 10
+            screen.blit(font.render(label, True, CYAN), (rx, y))
+            y += lh + 2
+            for line in wrap_text(font, text, rw):
+                screen.blit(font.render(line, True, WHITE), (rx, y))
+                y += lh
+            y += 8
 
-        screen.blit(self.f_small.render(
-            "Saved to NOTEBOOK [N]  >  TEST THE LOGIC  >  MY BASIC NOTES", True, YELLOW),
-            (FULL.x + 24, FULL.bottom - 62))
-        rect = pygame.Rect(FULL.right - 230, FULL.bottom - 52, 210, 38)
-        last = self.stage_i >= len(self.stages) - 1
-        self._button(screen, rect, "FINISH LEVEL" if last else "NEXT STAGE  [ENTER]", ("next",), GREEN)
-
-    # ---------------- notebook autofill ----------------
+    # ---------------- notebook autofill (unchanged) ----------------
     def notebook_lines(self, stage):
         sid = stage["id"]
         lines = {

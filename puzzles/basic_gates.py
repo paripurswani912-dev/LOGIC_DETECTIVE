@@ -30,6 +30,9 @@
 #   ENTER                      check the answer / go to the next stage
 #   H                          hint (press again for a stronger one)
 #   ESC                        leave (handled by main.py), N notebook
+#
+# UI NOTE: this version only changes how things are LAID OUT and WORDED.
+# All puzzle logic (checking, hints tiers, notebook, stages) is unchanged.
 
 import random
 
@@ -55,6 +58,7 @@ WIRE_ON = (70, 235, 130)
 WIRE_OFF = (78, 98, 118)
 BULB_ON = (255, 218, 92)
 BULB_OFF = (36, 46, 60)
+SOFT = (170, 185, 200)          # readable secondary text (brighter than GREY)
 
 
 # ------------------------------------------------------------------
@@ -203,7 +207,7 @@ def _scenario(gate, story, chips, answer, why):
         "chips": chips,
         "options": [("OFF  (0)", 0), ("ON  (1)", 1)],
         "correct": answer,
-        "task": "Is the output ON or OFF?",
+        "task": "Is the output ON or OFF? Click your answer, then press CHECK.",
         "ok": why,
         "hints": [
             f"Think about the gate: {GINFO[gate]['short']}",
@@ -224,11 +228,11 @@ def _explore_step(gate):
     return {
         "kind": "explore",
         "gate": gate,
-        "task": "Flip the switches. Try EVERY combination and watch the bulb.",
+        "task": "Click the switches. Try EVERY combination and watch the bulb.",
         "hints": [
-            "Click the switches (or press A and B) and watch the bulb react.",
+            "Click the switches (or press A and B on the keyboard) and watch the bulb change.",
             "The boxes under the circuit show which combinations you have tried. "
-            "Fill them all.",
+            "Each one turns green when done. Make them all green.",
             reveal,
         ],
     }
@@ -238,7 +242,7 @@ def _table_step(gate, task=None):
     return {
         "kind": "table",
         "gate": gate,
-        "task": task or "Fill in the Y column. What does the bulb do on each row?",
+        "task": task or "Fill in the Y column: for each row, is the output 0 (OFF) or 1 (ON)?",
         "hints": TABLE_HINTS[gate],
     }
 
@@ -673,7 +677,7 @@ class BasicGatesPuzzle(BasePuzzle):
         "read_bits": "type 0 or 1, BACKSPACE deletes",
         "explore": "click switches or press A / B",
         "combine": "A / B switches, 1-3 gate, T = add NOT",
-        "table": "click cell or UP/DOWN, then 0 or 1",
+        "table": "click a cell or UP/DOWN, then 0 or 1",
         "choice": "click an answer or press 0/1 (or 1-4)",
     }
 
@@ -696,6 +700,7 @@ class BasicGatesPuzzle(BasePuzzle):
         self.saved_stages = set()
         self.last_bulbs = [0, 0, 0, 0]
 
+        self._fonts = {}
         self.f_title = pygame.font.Font(None, 40)
         self.f_big = pygame.font.Font(None, 54)
         self.f_body = pygame.font.Font(None, 28)
@@ -703,6 +708,29 @@ class BasicGatesPuzzle(BasePuzzle):
         self.f_tiny = pygame.font.Font(None, 20)
 
         self._enter_step()
+
+    # ---------------- layout helpers (UI only) ----------------
+    def _font(self, size):
+        f = self._fonts.get(size)
+        if f is None:
+            f = pygame.font.Font(None, size)
+            self._fonts[size] = f
+        return f
+
+    def _fit_text(self, text, width, max_h, sizes=(24, 22, 20, 18, 16)):
+        """Pick the biggest font whose wrapped text fits in max_h."""
+        font, lines, lh = None, [], 0
+        for s in sizes:
+            font = self._font(s)
+            lines = wrap_text(font, text, width)
+            lh = font.get_linesize()
+            if len(lines) * lh <= max_h:
+                break
+        return font, lines, lh
+
+    def _caption(self, screen, text, cx, cy, color=SOFT, size=20):
+        img = self._font(size).render(text, True, color)
+        screen.blit(img, img.get_rect(center=(cx, cy)))
 
     # ---------------- state helpers ----------------
     @property
@@ -1080,7 +1108,9 @@ class BasicGatesPuzzle(BasePuzzle):
             pygame.draw.rect(screen, PANEL_EDGE, WORK, 2, border_radius=10)
             self._draw_side(screen)
             kind = self.step["kind"]
+            screen.set_clip(WORK.inflate(-4, -4))     # nothing can spill onto the side panel
             getattr(self, "_draw_" + kind)(screen)
+            screen.set_clip(None)
 
         self._draw_footer(screen)
 
@@ -1094,10 +1124,11 @@ class BasicGatesPuzzle(BasePuzzle):
                 f"{self.stage['title']}  -  {self.stage['sub']}")
         size = 40
         while size > 22:
-            font = pygame.font.Font(None, size)
+            font = self._font(size)
             if font.size(text)[0] <= 640:
                 break
             size -= 2
+        font = self._font(size)
         screen.blit(font.render(text, True, WHITE), (30, 34))
 
         for i in range(len(self.stages)):
@@ -1112,23 +1143,38 @@ class BasicGatesPuzzle(BasePuzzle):
             screen.blit(num, num.get_rect(center=(cx, 22)))
         if self.phase == "play":
             total = len(self.stage["steps"])
-            txt = self.f_tiny.render(f"Step {self.step_i + 1} of {total}", True, GREY)
+            txt = self.f_tiny.render(f"Step {self.step_i + 1} of {total}", True, SOFT)
             screen.blit(txt, (700, 46))
 
     def _draw_footer(self, screen):
-        y = 572
+        pygame.draw.line(screen, PANEL_EDGE, (30, 564), (settings.SCREEN_WIDTH - 30, 564), 1)
+
+        # message strip (left) - kept clear of the buttons (right)
         if self.toast:
             col = GREEN if self.toast_ok else YELLOW
-            for i, line in enumerate(wrap_text(self.f_body, self.toast, 930)[:2]):
-                screen.blit(self.f_body.render(line, True, col), (30, y + i * 24))
-        legend = self._legend()
-        screen.blit(self.f_tiny.render(legend, True, GREY), (30, 624))
+            font, lines, lh = self.f_body, [], 24
+            lines = wrap_text(font, self.toast, 690)
+            if len(lines) > 2:
+                font = self.f_small
+                lines = wrap_text(font, self.toast, 690)
+                lh = 22
+            for i, line in enumerate(lines[:2]):
+                screen.blit(font.render(line, True, col), (30, 574 + i * lh))
 
         if self.phase == "play":
-            rect = pygame.Rect(790, 590, 90, 32)
+            rect = pygame.Rect(750, 572, 110, 36)
             self._button(screen, rect, "CHECK", ("check",), CYAN)
-            rect = pygame.Rect(890, 590, 80, 32)
-            self._button(screen, rect, "HINT", ("hint",), YELLOW)
+            rect = pygame.Rect(870, 572, 100, 36)
+            self._button(screen, rect, "HINT [H]", ("hint",), YELLOW)
+
+        # key legend, shrunk if needed so it never runs off the screen
+        legend = self._legend()
+        ly = min(626, getattr(settings, "SCREEN_HEIGHT", 650) - 22)
+        for size in (20, 19, 18, 17, 16):
+            f = self._font(size)
+            if f.size(legend)[0] <= 940:
+                break
+        screen.blit(f.render(legend, True, SOFT), (30, ly))
 
     def _legend(self):
         if self.phase == "done":
@@ -1141,7 +1187,10 @@ class BasicGatesPuzzle(BasePuzzle):
         hover = rect.collidepoint(pygame.mouse.get_pos())
         pygame.draw.rect(screen, (24, 52, 74) if hover else PANEL, rect, border_radius=6)
         pygame.draw.rect(screen, color, rect, 2, border_radius=6)
-        img = self.f_small.render(label, True, color)
+        font = self.f_small
+        if font.size(label)[0] > rect.width - 10:
+            font = self.f_tiny
+        img = font.render(label, True, color)
         screen.blit(img, img.get_rect(center=rect.center))
         self.buttons.append((rect, action))
 
@@ -1149,35 +1198,58 @@ class BasicGatesPuzzle(BasePuzzle):
         pygame.draw.rect(screen, PANEL, SIDE, border_radius=10)
         pygame.draw.rect(screen, PANEL_EDGE, SIDE, 2, border_radius=10)
         screen.set_clip(SIDE.inflate(-4, -4))
-        y = SIDE.y + 12
-        screen.blit(self.f_small.render("BRIEFING", True, CYAN), (SIDE.x + 14, y))
-        y += 28
-        for para in self.stage["brief"]:
-            for line in wrap_text(self.f_tiny, para, SIDE.width - 28):
-                screen.blit(self.f_tiny.render(line, True, WHITE), (SIDE.x + 14, y))
-                y += 20
-            y += 6
-        y += 4
-        screen.blit(self.f_small.render("YOUR TASK", True, GREEN), (SIDE.x + 14, y))
-        y += 26
-        for line in wrap_text(self.f_tiny, self.step["task"], SIDE.width - 28):
-            screen.blit(self.f_tiny.render(line, True, WHITE), (SIDE.x + 14, y))
-            y += 20
 
+        # ----- hint box lives at the bottom, fixed size -----
         box = pygame.Rect(SIDE.x + 10, SIDE.bottom - 168, SIDE.width - 20, 158)
-        pygame.draw.rect(screen, (22, 40, 30) if self.st["tier"] else (18, 30, 44),
+
+        # ----- briefing + task share the space above the hint box -----
+        top = SIDE.y + 12
+        avail = box.top - 8 - top
+        tw = SIDE.width - 28
+        chosen = None
+        for size in (21, 20, 19, 18, 17, 16):
+            font = self._font(size)
+            lh = font.get_linesize()
+            brief = [wrap_text(font, p, tw) for p in self.stage["brief"]]
+            task = wrap_text(font, self.step["task"], tw)
+            h = 24 + sum(len(l) * lh + 6 for l in brief) + 6 + 24 + len(task) * lh
+            chosen = (font, lh, brief, task)
+            if h <= avail:
+                break
+        font, lh, brief, task = chosen
+
+        y = top
+        screen.blit(self.f_small.render("BRIEFING", True, CYAN), (SIDE.x + 14, y))
+        y += 24
+        for para in brief:
+            for line in para:
+                screen.blit(font.render(line, True, WHITE), (SIDE.x + 14, y))
+                y += lh
+            y += 6
+        y += 6
+        screen.blit(self.f_small.render("YOUR TASK", True, GREEN), (SIDE.x + 14, y))
+        y += 24
+        for line in task:
+            screen.blit(font.render(line, True, WHITE), (SIDE.x + 14, y))
+            y += lh
+
+        # ----- hint box -----
+        tier = self.st["tier"]
+        pygame.draw.rect(screen, (22, 40, 30) if tier else (18, 30, 44),
                          box, border_radius=8)
         pygame.draw.rect(screen, YELLOW, box, 2, border_radius=8)
-        tier = self.st["tier"]
-        labels = {0: "HINT", 1: "HINT 1/3  (a nudge)", 2: "HINT 2/3  (stronger)",
-                  3: "HINT 3/3  (the answer)"}
+        labels = {0: "NEED HELP?", 1: "HINT 1 of 3  (a small nudge)",
+                  2: "HINT 2 of 3  (stronger)", 3: "HINT 3 of 3  (the answer)"}
         screen.blit(self.f_small.render(labels[tier], True, YELLOW), (box.x + 10, box.y + 8))
-        text = self._hint_text() or "Stuck? Press H. Press it again for a stronger hint."
-        color = WHITE if tier else GREY
+        text = self._hint_text() or ("Stuck? Click HINT or press H. "
+                                     "Press it again for a stronger hint.")
+        color = WHITE if tier else SOFT
+        hfont, hlines, hlh = self._fit_text(text, box.width - 20, box.height - 42,
+                                            sizes=(22, 21, 20, 19, 18, 17, 16))
         yy = box.y + 34
-        for line in wrap_text(self.f_tiny, text, box.width - 20)[:6]:
-            screen.blit(self.f_tiny.render(line, True, color), (box.x + 10, yy))
-            yy += 19
+        for line in hlines:
+            screen.blit(hfont.render(line, True, color), (box.x + 10, yy))
+            yy += hlh
         screen.set_clip(None)
 
     # --- shared small widgets ---
@@ -1187,7 +1259,10 @@ class BasicGatesPuzzle(BasePuzzle):
         fill = (24, 90, 55) if on else (30, 42, 56)
         pygame.draw.rect(screen, fill, rect, border_radius=8)
         pygame.draw.rect(screen, GREEN if on else GREY, rect, 2, border_radius=8)
-        img = self.f_small.render(text, True, WHITE)
+        font = self.f_small
+        if font.size(text)[0] > w - 8:
+            font = self.f_tiny
+        img = font.render(text, True, WHITE)
         screen.blit(img, img.get_rect(center=rect.center))
         return rect
 
@@ -1211,7 +1286,8 @@ class BasicGatesPuzzle(BasePuzzle):
         n = len(step["target"])
         xs = [WORK.centerx + (i - (n - 1) / 2) * 120 for i in range(n)]
 
-        screen.blit(self.f_small.render("TARGET", True, CYAN), (WORK.x + 24, WORK.y + 22))
+        screen.blit(self.f_small.render("TARGET  (make yours look like this)", True, CYAN),
+                    (WORK.x + 24, WORK.y + 18))
         if step.get("target_as_bits"):
             code = "   ".join(str(b) for b in step["target"])
             img = self.f_big.render(code, True, YELLOW)
@@ -1222,8 +1298,8 @@ class BasicGatesPuzzle(BasePuzzle):
 
         pygame.draw.line(screen, PANEL_EDGE, (WORK.x + 20, WORK.y + 170),
                          (WORK.right - 20, WORK.y + 170), 2)
-        screen.blit(self.f_small.render("YOUR BULBS  (click to flip)", True, GREEN),
-                    (WORK.x + 24, WORK.y + 190))
+        screen.blit(self.f_small.render("YOUR BULBS  (click a bulb to flip it)", True, GREEN),
+                    (WORK.x + 24, WORK.y + 184))
         for i, (x, v) in enumerate(zip(xs, st["bulbs"])):
             cx, cy = int(x), WORK.y + 295
             draw_bulb(screen, cx, cy, 40, v, f"{i + 1}:  {v}", self.f_body)
@@ -1232,24 +1308,26 @@ class BasicGatesPuzzle(BasePuzzle):
         match = sum(1 for x, y in zip(st["bulbs"], step["target"]) if x == y)
         txt = self.f_body.render(f"Bulbs matching: {match} / {n}", True,
                                  GREEN if match == n else WHITE)
-        screen.blit(txt, txt.get_rect(center=(WORK.centerx, WORK.bottom - 40)))
-        key = self.f_tiny.render("Glowing bulb = 1 (ON)      Dark bulb = 0 (OFF)", True, GREY)
-        screen.blit(key, key.get_rect(center=(WORK.centerx, WORK.bottom - 16)))
+        screen.blit(txt, txt.get_rect(center=(WORK.centerx, WORK.bottom - 44)))
+        self._caption(screen, "Glowing bulb = 1 (ON)      Dark bulb = 0 (OFF)",
+                      WORK.centerx, WORK.bottom - 18)
 
     def _draw_read_bits(self, screen):
         step, st = self.step, self.st
         n = len(step["pattern"])
         xs = [WORK.centerx + (i - (n - 1) / 2) * 120 for i in range(n)]
         screen.blit(self.f_small.render("LOOK AT THE BULBS", True, CYAN),
-                    (WORK.x + 24, WORK.y + 22))
+                    (WORK.x + 24, WORK.y + 18))
         for x, v in zip(xs, step["pattern"]):
-            draw_bulb(screen, int(x), WORK.y + 130, 40, v)
+            draw_bulb(screen, int(x), WORK.y + 125, 40, v)
+        self._caption(screen, "Glowing bulb = 1      Dark bulb = 0",
+                      WORK.centerx, WORK.y + 205)
 
         screen.blit(self.f_small.render("TYPE THE BITS (left to right)", True, GREEN),
-                    (WORK.x + 24, WORK.y + 250))
+                    (WORK.x + 24, WORK.y + 240))
         for i, x in enumerate(xs):
             box = pygame.Rect(0, 0, 76, 76)
-            box.center = (int(x), WORK.y + 340)
+            box.center = (int(x), WORK.y + 325)
             pygame.draw.rect(screen, (24, 40, 58), box, border_radius=8)
             filled = i < len(st["typed"])
             pygame.draw.rect(screen, YELLOW if i == len(st["typed"]) else GREY, box, 3,
@@ -1268,47 +1346,50 @@ class BasicGatesPuzzle(BasePuzzle):
         gate = step["gate"]
         info = GINFO[gate]
         for i, line in enumerate(wrap_text(self.f_small, info["analogy"], WORK.width - 40)):
-            screen.blit(self.f_small.render(line, True, CYAN), (WORK.x + 20, WORK.y + 16 + i * 22))
+            screen.blit(self.f_small.render(line, True, CYAN), (WORK.x + 20, WORK.y + 14 + i * 22))
 
-        sym = pygame.Rect(260, 225, 170, 130)
+        sym = pygame.Rect(250, 235, 170, 130)
         ina, inb, out = gate_pins(gate, sym)
         a, b = st["a"], st["b"]
         y_val = gate_out(gate, a, b)
 
         if gate == "NOT":
             sw_a = (110, ina[1])
+            self._caption(screen, "INPUT (switch)", sw_a[0], sw_a[1] - 64)
             self._switch(screen, sw_a[0], sw_a[1], "A", a, ("switch", "a"))
             draw_wire(screen, (sw_a[0] + 48, sw_a[1]), ina, a)
         else:
-            self._switch(screen, 110, 215, "A", a, ("switch", "a"))
-            self._switch(screen, 110, 365, "B", b, ("switch", "b"))
-            draw_wire(screen, (158, 215), ina, a)
-            draw_wire(screen, (158, 365), inb, b)
+            self._caption(screen, "INPUTS (switches)", 110, 162)
+            self._switch(screen, 110, 225, "A", a, ("switch", "a"))
+            self._switch(screen, 110, 375, "B", b, ("switch", "b"))
+            draw_wire(screen, (158, 225), ina, a)
+            draw_wire(screen, (158, 375), inb, b)
 
         draw_gate(screen, gate, sym, WHITE)
         label = self.f_small.render(gate, True, YELLOW)
         screen.blit(label, label.get_rect(center=(sym.centerx, sym.bottom + 16)))
 
-        bulb = (545, out[1])
+        bulb = (520, out[1])
         draw_wire(screen, out, (bulb[0] - 42, out[1]), y_val)
+        self._caption(screen, "OUTPUT (bulb)", bulb[0], bulb[1] - 62)
         draw_bulb(screen, bulb[0], bulb[1], 38, y_val)
-        yl = self.f_body.render(f"Y = {y_val}", True, BULB_ON if y_val else GREY)
-        screen.blit(yl, yl.get_rect(center=(bulb[0], bulb[1] + 70)))
+        yl = self.f_body.render(f"Y = {y_val}", True, BULB_ON if y_val else SOFT)
+        screen.blit(yl, yl.get_rect(center=(bulb[0], bulb[1] + 66)))
 
         # combinations tracker
-        screen.blit(self.f_tiny.render("COMBINATIONS TRIED", True, GREY),
-                    (WORK.x + 24, WORK.bottom - 74))
+        screen.blit(self.f_tiny.render("COMBINATIONS YOU HAVE TRIED  (green = done)", True, SOFT),
+                    (WORK.x + 24, WORK.bottom - 78))
         if gate == "NOT":
             combos = [(0, 0), (1, 0)]
             labels = ["A = 0", "A = 1"]
             seen = {(s[0], 0) for s in st["seen"]}
         else:
             combos = [(0, 0), (0, 1), (1, 0), (1, 1)]
-            labels = [f"{x}{y}" for x, y in combos]
+            labels = [f"A{x} B{y}" for x, y in combos]
             seen = st["seen"]
         for i, (c, lab) in enumerate(zip(combos, labels)):
-            self._chip(screen, WORK.x + 80 + i * 100, WORK.bottom - 32, lab,
-                       c in seen, w=84)
+            self._chip(screen, WORK.x + 80 + i * 100, WORK.bottom - 34, lab,
+                       c in seen, w=88)
 
     # --- stage 7: combine ---
     def _draw_combine(self, screen):
@@ -1318,45 +1399,51 @@ class BasicGatesPuzzle(BasePuzzle):
         a, b = st["a"], st["b"]
 
         # gate selector + NOT toggle
+        screen.blit(self.f_tiny.render("1. PICK A GATE", True, SOFT), (WORK.x + 24, WORK.y + 8))
         for i, g in enumerate(("AND", "OR", "XOR")):
-            rect = pygame.Rect(WORK.x + 24 + i * 100, WORK.y + 18, 90, 36)
+            rect = pygame.Rect(WORK.x + 24 + i * 100, WORK.y + 28, 90, 36)
             col = YELLOW if g == gate else GREY
             self._button(screen, rect, f"{i + 1}  {g}", ("pick_gate", g), col)
-        rect = pygame.Rect(WORK.right - 190, WORK.y + 18, 166, 36)
+        screen.blit(self.f_tiny.render("2. ADD OR REMOVE NOT", True, SOFT),
+                    (WORK.right - 190, WORK.y + 8))
+        rect = pygame.Rect(WORK.right - 190, WORK.y + 28, 166, 36)
         self._button(screen, rect, "REMOVE NOT [T]" if use_not else "ADD NOT [T]",
                      ("toggle_not",), GREEN if use_not else CYAN)
 
-        sym = pygame.Rect(190, 235, 150, 130)
+        sym = pygame.Rect(190, 245, 150, 130)
         ina, inb, out = gate_pins(gate, sym)
-        self._switch(screen, 95, 235, "A", a, ("switch", "a"))
-        self._switch(screen, 95, 395, "B", b, ("switch", "b"))
-        draw_wire(screen, (143, 235), ina, a)
-        draw_wire(screen, (143, 395), inb, b)
+        self._switch(screen, 95, 245, "A", a, ("switch", "a"))
+        self._switch(screen, 95, 405, "B", b, ("switch", "b"))
+        draw_wire(screen, (143, 245), ina, a)
+        draw_wire(screen, (143, 405), inb, b)
         draw_gate(screen, gate, sym, WHITE)
+        self._caption(screen, gate, sym.centerx, sym.bottom + 14, YELLOW, 22)
 
         base = gate_out(gate, a, b)
         final = 1 - base if use_not else base
-        not_rect = pygame.Rect(385, 260, 100, 80)
+        not_rect = pygame.Rect(385, 270, 100, 80)
         nin, _n2, nout = gate_pins("NOT", not_rect)
         draw_wire(screen, out, nin, base, elbow=False)
         draw_gate(screen, "NOT", not_rect, WHITE if use_not else (70, 84, 100))
         if not use_not:
             draw_wire(screen, nin, nout, base, elbow=False)
-        bulb = (545, 300)
-        draw_wire(screen, nout, (bulb[0] - 38, 300), final, elbow=False)
+        self._caption(screen, "NOT" if use_not else "NOT (off)", not_rect.centerx,
+                      not_rect.bottom + 14, YELLOW if use_not else GREY, 22)
+        bulb = (545, 310)
+        draw_wire(screen, nout, (bulb[0] - 38, 310), final, elbow=False)
         draw_bulb(screen, bulb[0], bulb[1], 32, final)
-        yl = self.f_body.render(f"Y = {final}", True, BULB_ON if final else GREY)
-        screen.blit(yl, yl.get_rect(center=(bulb[0], bulb[1] + 66)))
+        yl = self.f_body.render(f"Y = {final}", True, BULB_ON if final else SOFT)
+        screen.blit(yl, yl.get_rect(center=(bulb[0], bulb[1] + 62)))
 
         name = {"AND": "NAND", "OR": "NOR", "XOR": "XNOR"}[gate] if use_not else gate
         title = f"{gate} + NOT  =  {name}" if use_not else f"{gate}  (no NOT yet)"
         img = self.f_title.render(title, True, YELLOW if use_not else WHITE)
-        screen.blit(img, img.get_rect(center=(WORK.centerx, WORK.bottom - 62)))
+        screen.blit(img, img.get_rect(center=(WORK.centerx, WORK.bottom - 52)))
         done = [g for g in ("AND", "OR") if g in st["seen"]]
         msg = self.f_tiny.render(
             "NOT added to: " + (", ".join(done) if done else "nothing yet") + "   (need AND and OR)",
-            True, GREEN if len(done) == 2 else GREY)
-        screen.blit(msg, msg.get_rect(center=(WORK.centerx, WORK.bottom - 28)))
+            True, GREEN if len(done) == 2 else SOFT)
+        screen.blit(msg, msg.get_rect(center=(WORK.centerx, WORK.bottom - 20)))
 
     # --- truth table ---
     def _draw_table(self, screen):
@@ -1366,12 +1453,16 @@ class BasicGatesPuzzle(BasePuzzle):
         two = gate != "NOT"
 
         screen.blit(self.f_small.render("A truth table lists every input and its output.",
-                                        True, CYAN), (WORK.x + 20, WORK.y + 16))
-        screen.blit(self.f_tiny.render("Click a Y cell (or UP/DOWN), then press 0 or 1.",
-                                       True, GREY), (WORK.x + 20, WORK.y + 42))
-        x0, y0 = 90, 140
+                                        True, CYAN), (WORK.x + 20, WORK.y + 14))
+        screen.blit(self.f_tiny.render("Click a Y box (click again to flip it) or press 0 / 1.",
+                                       True, SOFT), (WORK.x + 20, WORK.y + 40))
+        x0, y0 = 90, 190
         cols = [("A", x0), ("B", x0 + 80), ("Y", x0 + 190)] if two else \
                [("A", x0), ("Y", x0 + 120)]
+        # small captions so beginners know which side is input / output
+        in_right = cols[-2][1] + 66
+        self._caption(screen, "INPUTS", (x0 + in_right) // 2, y0 - 12)
+        self._caption(screen, "OUTPUT", cols[-1][1] + 33, y0 - 12, YELLOW)
         for name, cx in cols:
             hd = pygame.Rect(cx, y0, 66, 38)
             pygame.draw.rect(screen, (30, 60, 84), hd, border_radius=6)
@@ -1379,7 +1470,7 @@ class BasicGatesPuzzle(BasePuzzle):
             screen.blit(img, img.get_rect(center=hd.center))
 
         for i, row in enumerate(rows):
-            ry = y0 + 52 + i * 62
+            ry = y0 + 50 + i * 60
             for j, v in enumerate(row):
                 cell = pygame.Rect(cols[j][1], ry, 66, 50)
                 pygame.draw.rect(screen, (24, 40, 58), cell, border_radius=6)
@@ -1393,24 +1484,26 @@ class BasicGatesPuzzle(BasePuzzle):
             edge = RED if i in st["bad"] else (YELLOW if i == st["sel"] else GREY)
             pygame.draw.rect(screen, edge, cell, 3, border_radius=6)
             txt = "?" if val is None else str(val)
-            img = self.f_title.render(txt, True, GREY if val is None else GREEN)
+            img = self.f_title.render(txt, True, SOFT if val is None else GREEN)
             screen.blit(img, img.get_rect(center=cell.center))
             self.buttons.append((cell, ("cell", i)))
             if val is not None and not st["bad"]:
-                draw_bulb(screen, ycx + 90, ry + 25, 14, val)
+                draw_bulb(screen, ycx + 88, ry + 25, 12, val)
 
-        sym = pygame.Rect(400, 190, 190, 130)
+        sym = pygame.Rect(425, 215, 170, 120)
         draw_gate(screen, gate, sym, WHITE)
         lab = self.f_body.render(gate, True, YELLOW)
         screen.blit(lab, lab.get_rect(center=(sym.centerx, sym.bottom + 20)))
-        for i, line in enumerate(wrap_text(self.f_tiny, GINFO[gate]["rule"], 200)):
-            screen.blit(self.f_tiny.render(line, True, GREY),
-                        (sym.x - 6, sym.bottom + 46 + i * 18))
+        rfont, rlines, rlh = self._fit_text(GINFO[gate]["rule"], 190, 90,
+                                            sizes=(20, 19, 18, 17))
+        for i, line in enumerate(rlines):
+            screen.blit(rfont.render(line, True, SOFT),
+                        (sym.x - 6, sym.bottom + 44 + i * rlh))
 
     # --- multiple-choice steps ---
     def _draw_choice(self, screen):
         step, st = self.step, self.st
-        y = WORK.y + 16
+        y = WORK.y + 14
         for line in wrap_text(self.f_body, step["q"], WORK.width - 40):
             screen.blit(self.f_body.render(line, True, WHITE), (WORK.x + 20, y))
             y += 28
@@ -1428,11 +1521,17 @@ class BasicGatesPuzzle(BasePuzzle):
                 draw_bulb(screen, cx, cy, 30, val)
                 img = self.f_small.render(f"{name} = {val}", True, WHITE)
                 screen.blit(img, img.get_rect(center=(cx, cy + 62)))
+            self._caption(screen, "Glowing bulb = 1 (ON)      Dark bulb = 0 (OFF)",
+                          WORK.centerx, cy + 98)
         elif visual == "symbol":
             draw_gate(screen, step["gate"], pygame.Rect(WORK.centerx - 120, cy - 70, 240, 150),
                       WHITE, stroke=4)
+            self._caption(screen, "Look at the SHAPE of the back and front.",
+                          WORK.centerx, cy + 100)
         elif visual == "column":
             self._draw_mystery_column(screen, step["gate"], WORK.centerx - 130, cy - 80)
+            self._caption(screen, "Rows go A B = 00, 01, 10, 11.  Y is the output.",
+                          WORK.centerx, cy + 150)
         elif visual == "boss":
             self._draw_boss(screen, step["inputs"])
         else:
@@ -1462,7 +1561,7 @@ class BasicGatesPuzzle(BasePuzzle):
             gap = 20
             total = n * row_w + (n - 1) * gap
             x = WORK.centerx - total // 2
-            return [pygame.Rect(x + i * (row_w + gap), WORK.bottom - 78, row_w, 56)
+            return [pygame.Rect(x + i * (row_w + gap), WORK.bottom - 74, row_w, 56)
                     for i in range(n)]
         height, gap = 40, 8
         total = n * height + (n - 1) * gap
@@ -1487,43 +1586,46 @@ class BasicGatesPuzzle(BasePuzzle):
 
     def _draw_boss(self, screen, inputs):
         a, b, c = inputs
-        oy = 62
-        or_r = pygame.Rect(240, 150 + oy, 120, 84)
-        not_r = pygame.Rect(240, 280 + oy, 120, 60)
-        and_r = pygame.Rect(430, 190 + oy, 130, 100)
+        oy = 56
+        or_r = pygame.Rect(215, 150 + oy, 120, 84)
+        not_r = pygame.Rect(215, 275 + oy, 120, 60)
+        and_r = pygame.Rect(385, 190 + oy, 120, 100)
         o_a, o_b, o_out = gate_pins("OR", or_r)
         n_in, _n2, n_out = gate_pins("NOT", not_r)
         a_in, a_b, a_out = gate_pins("AND", and_r)
 
-        sources = [("Door", a, 110, 172 + oy), ("Window", b, 110, 214 + oy),
-                   ("Badge", c, 110, 310 + oy)]
+        sources = [("Door", a, 100, 172 + oy), ("Window", b, 100, 214 + oy),
+                   ("Badge", c, 100, 305 + oy)]
         for name, val, sx, sy in sources:
-            self._chip(screen, sx, sy, f"{name} {val}", val, w=124, h=34)
-        draw_wire(screen, (172, 172 + oy), o_a, a)
-        draw_wire(screen, (172, 214 + oy), o_b, b)
-        draw_wire(screen, (172, 310 + oy), n_in, c)
+            self._chip(screen, sx, sy, f"{name} {val}", val, w=116, h=34)
+        draw_wire(screen, (158, 172 + oy), o_a, a)
+        draw_wire(screen, (158, 214 + oy), o_b, b)
+        draw_wire(screen, (158, 305 + oy), n_in, c)
 
         draw_gate(screen, "OR", or_r, WHITE)
         draw_gate(screen, "NOT", not_r, WHITE)
         draw_gate(screen, "AND", and_r, WHITE)
         neutral = (80, 130, 160)
         pygame.draw.lines(screen, neutral, False,
-                          [o_out, (400, o_out[1]), (400, a_in[1]), a_in], 4)
+                          [o_out, (360, o_out[1]), (360, a_in[1]), a_in], 4)
         pygame.draw.lines(screen, neutral, False,
-                          [n_out, (400, n_out[1]), (400, a_b[1]), a_b], 4)
-        pygame.draw.line(screen, neutral, a_out, (a_out[0] + 40, a_out[1]), 4)
-        draw_bulb(screen, a_out[0] + 80, a_out[1], 24, 0)
+                          [n_out, (360, n_out[1]), (360, a_b[1]), a_b], 4)
+        pygame.draw.line(screen, neutral, a_out, (a_out[0] + 36, a_out[1]), 4)
+        draw_bulb(screen, a_out[0] + 70, a_out[1], 24, 0)
         q = self.f_body.render("?", True, YELLOW)
-        screen.blit(q, q.get_rect(center=(a_out[0] + 80, a_out[1] + 50)))
+        screen.blit(q, q.get_rect(center=(a_out[0] + 70, a_out[1] + 50)))
         for text, r in (("OR", or_r), ("NOT", not_r), ("AND", and_r)):
             img = self.f_tiny.render(text, True, YELLOW)
             screen.blit(img, img.get_rect(center=(r.centerx, r.bottom + 12)))
+        self._caption(screen, "Green chip = 1 (ON), grey chip = 0 (OFF). Follow the wires left to right.",
+                      WORK.centerx, not_r.bottom + 44)
 
     # --- stage-complete card ---
     def _draw_done(self, screen):
         stage = self.stage
         pygame.draw.rect(screen, PANEL, FULL, border_radius=10)
         pygame.draw.rect(screen, GREEN, FULL, 3, border_radius=10)
+        screen.set_clip(FULL.inflate(-6, -6))
         n = self.stage_i + 1
         head = self.f_big.render(f"STAGE {n} COMPLETE", True, GREEN)
         screen.blit(head, (FULL.x + 24, FULL.y + 14))
@@ -1551,36 +1653,49 @@ class BasicGatesPuzzle(BasePuzzle):
                              rows, [90, 210], rowh=34)
         elif len(gates) == 1:
             g = gates[0]
-            draw_gate(screen, g, pygame.Rect(left.x + 10, left.y, 170, 110), WHITE, 4)
+            draw_gate(screen, g, pygame.Rect(left.x + 10, left.y, 170, 100), WHITE, 4)
             hdr = ["A", "Y"] if g == "NOT" else ["A", "B", "Y"]
             rows = [[*map(str, r), str(gate_out(g, *r))] for r in rows_for(g)]
-            self._done_table(screen, left.x + 10, left.y + 130, hdr, rows, 62, rowh=34)
+            self._done_table(screen, left.x + 10, left.y + 120, hdr, rows, 62, rowh=32)
         else:
             for i, g in enumerate(gates):
                 draw_gate(screen, g, pygame.Rect(left.x + 10 + i * 170, left.y, 150, 100), WHITE, 3)
             rows = [[str(a), str(b), str(gate_out("NAND", a, b)), str(gate_out("NOR", a, b))]
                     for a, b in rows_for("NAND")]
             self._done_table(screen, left.x + 10, left.y + 120, ["A", "B", "NAND", "NOR"],
-                             rows, 70, rowh=34)
+                             rows, 70, rowh=32)
 
-        # right column: rule / math / memory
+        # right column: rule / math / memory (font shrinks so it never hits the footer)
         rx = FULL.x + 390
         rw = FULL.right - rx - 24
-        y = FULL.y + 104
+        top = FULL.y + 104
+        avail = (FULL.bottom - 72) - top
         items = self._done_items(stage)
-        for label, text in items:
-            screen.blit(self.f_small.render(label, True, CYAN), (rx, y))
-            y += 24
-            for line in wrap_text(self.f_small, text, rw):
-                screen.blit(self.f_small.render(line, True, WHITE), (rx, y))
-                y += 23
+        layout = None
+        for body_size, lab_size in ((23, 23), (21, 21), (19, 20), (18, 19), (17, 18)):
+            bf, lf = self._font(body_size), self._font(lab_size)
+            lh = bf.get_linesize()
+            blocks = [(label, wrap_text(bf, text, rw)) for label, text in items]
+            total = sum(lf.get_linesize() + 2 + len(ls) * lh + 10 for _l, ls in blocks)
+            layout = (bf, lf, lh, blocks)
+            if total <= avail:
+                break
+        bf, lf, lh, blocks = layout
+        y = top
+        for label, lines in blocks:
+            screen.blit(lf.render(label, True, CYAN), (rx, y))
+            y += lf.get_linesize() + 2
+            for line in lines:
+                screen.blit(bf.render(line, True, WHITE), (rx, y))
+                y += lh
             y += 10
 
         note = self.f_small.render(
             "Saved to NOTEBOOK [N]  >  TEST THE LOGIC  >  MY BASIC NOTES", True, YELLOW)
-        screen.blit(note, (FULL.x + 24, FULL.bottom - 62))
-        rect = pygame.Rect(FULL.right - 230, FULL.bottom - 52, 210, 38)
+        screen.blit(note, (FULL.x + 24, FULL.bottom - 40))
+        rect = pygame.Rect(FULL.right - 240, FULL.bottom - 52, 220, 38)
         last = self.stage_i >= len(self.stages) - 1
+        screen.set_clip(None)
         self._button(screen, rect, "FINISH LEVEL" if last else "NEXT STAGE  [ENTER]",
                      ("next",), GREEN)
 
@@ -1616,7 +1731,8 @@ class BasicGatesPuzzle(BasePuzzle):
         for j, h in enumerate(headers):
             rect = pygame.Rect(xs[j], y, widths[j] - 4, rowh - 2)
             pygame.draw.rect(screen, (30, 60, 84), rect, border_radius=4)
-            img = self.f_small.render(h, True, YELLOW)
+            font = self.f_small if self.f_small.size(h)[0] <= rect.width - 6 else self.f_tiny
+            img = font.render(h, True, YELLOW)
             screen.blit(img, img.get_rect(center=rect.center))
         for i, row in enumerate(rows):
             for j, v in enumerate(row):
