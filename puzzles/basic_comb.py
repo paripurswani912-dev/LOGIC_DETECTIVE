@@ -14,7 +14,7 @@
 #   6  Gray code           binary <-> Gray with XOR gates                  [exam]
 #   7  Decoder             a code in, ONE wire out (minterm generator)     [exam]
 #   8  Multiplexer         many in, one out; 4:1 and 8:1 implementations   [exam]
-#   9  BOSS                five paper-style questions
+#   9  BOSS                paper-style questions
 #
 # Every stage starts with WHAT IS IT FOR, then SEE IT (demo + sandbox),
 # SAY IT (the rule), PREDICT IT (fill a table) and PROVE IT (build / exam step).
@@ -28,6 +28,10 @@
 #   cmux      choose what goes on every data input of a multiplexer
 #   cbits     light the bulbs that show a binary answer
 #   choice    the usual multiple-choice step (with circuit / K-map pictures)
+#
+# THIS VERSION: puzzle logic, answers and step order are unchanged.  Changes are
+#   * drawing code: text is measured and fitted so nothing runs into anything else
+#   * wording: briefs, tasks, hints and captions use plain, short sentences
 
 import math
 
@@ -64,9 +68,9 @@ def _mt(ones, n=3):
 # ------------------------------------------------------------------
 def frames_step(sim, frames, task, hints=None, tag=None):
     return {"kind": "cframes", "sim": sim, "frames": frames, "task": task, "tag": tag,
-            "hints": hints or H("Press NEXT (or the RIGHT arrow) to move to the next picture.",
-                                "Look at every picture. The step finishes when you have seen them all.",
-                                "Click NEXT until all the dots are green, then press CHECK.")}
+            "hints": hints or H("Click NEXT (or press the RIGHT arrow) to see the next picture.",
+                                "Keep clicking NEXT. Each picture you have seen turns its dot green.",
+                                "When every dot is green, press CHECK.")}
 
 
 def see_step(sim, goals, task, hints, note=None, start=None, tag=None):
@@ -149,34 +153,34 @@ def stage_half():
     return {
         "id": "c1_half", "title": "Half adder", "sub": "adding two bits", "gates": [],
         "brief": [
-            "WHAT IS IT FOR? A calculator adds with tiny circuits. 1 + 1 = 2 needs two "
-            "digits (10), so the answer has a SUM bulb and a CARRY bulb.",
-            "Rule: Sum = XOR, Carry = AND.",
+            "WHAT IS IT FOR? Calculators add with tiny circuits. 1 + 1 = 2 is written 10, "
+            "so the answer needs TWO bulbs: SUM and CARRY.",
+            "Rule: Sum = XOR (bits differ). Carry = AND (both are 1).",
         ],
         "steps": [
             frames_step("ha", [{"vals": v, "caption": c} for _l, v, c in caps],
-                        "Watch all four additions. Press NEXT."),
+                        "Watch all four additions. Click NEXT."),
             see_step("ha", [("rows", 4)], "Now YOU flip A and B. Try all four rows.",
-                     H("Click a switch (or press 1 and 2) and watch the bulbs.",
-                       "There are four rows: 00, 01, 10 and 11. The table on the right ticks them off.",
-                       "Flip A and B until each of the four rows has been highlighted once.")),
+                     H("Click a switch (or press 1 and 2) and watch the bulbs change.",
+                       "There are four rows: 00, 01, 10 and 11. The table on the right ticks each row you try.",
+                       "Flip A and B until all four rows have been highlighted once.")),
             table_step("ha", ["Sum", "Carry"], "Predict: fill the Sum and Carry columns.",
-                       H("Add the two bits. Write the answer in binary: the right digit is Sum, the left digit is Carry.",
-                         "Row 1 1: 1 + 1 = 2 = binary 10, so Carry = 1 and Sum = 0.",
+                       H("Add the two bits. Write the answer in binary. The RIGHT digit is Sum, the LEFT digit is Carry.",
+                         "Example, row 1 1: 1 + 1 = 2, and 2 is 10 in binary. So Carry = 1 and Sum = 0.",
                          "Sum column: 0 1 1 0.   Carry column: 0 0 0 1.")),
             slots_step("ha", {"s": "XOR", "c": "AND"}, {"s": "makes SUM", "c": "makes CARRY"},
                        {"s": "SUM is 1 when the two bits are DIFFERENT (0+1 or 1+0). The gate for 'different' is XOR.",
                         "c": "CARRY is 1 only when BOTH bits are 1. The gate for 'both' is AND."},
                        "Build the half adder: click each ? and choose its gate.",
-                       H("Look at the truth table: when is Sum ON? When are the bits different or the same?",
+                       H("Look at the Sum column 0 1 1 0. Is it ON when the bits are different, or when they are the same?",
                          "Sum column 0 1 1 0 is the XOR gate. Carry column 0 0 0 1 is the AND gate.",
                          "Top gate (SUM) = XOR.  Bottom gate (CARRY) = AND.")),
             choice_step("A half adder gets A = 1 and B = 1. Read CARRY then SUM as one binary number. "
                         "What number is it?", ["00", "01", "10", "11"], "10",
                         "Pick the number shown by Carry and Sum together.",
-                        H("Carry is the left digit, Sum is the right digit.",
+                        H("Carry is the left digit. Sum is the right digit.",
                           "1 + 1 = 2. How do you write 2 in binary?",
-                          "Carry = 1, Sum = 0, so the number is 10 (two)."),
+                          "Carry = 1, Sum = 0, so the number is 10 (that is two)."),
                         ok="Binary 10 = 2 = 1 + 1."),
             choice_step("A half adder has no memory: its outputs depend ONLY on A and B right now. "
                         "That is a COMBINATIONAL circuit. Which one below is NOT combinational "
@@ -185,9 +189,9 @@ def stage_half():
                          "A bank of AND gates"],
                         "A lock that remembers the last 3 digits you typed",
                         "Pick the circuit that needs memory.",
-                        H("Combinational = output depends only on the inputs now.",
-                          "Which choice needs to remember something from earlier?",
-                          "The lock that remembers earlier digits. That is a SEQUENTIAL circuit (Level 6)."),
+                        H("Combinational = the output depends only on the inputs right now.",
+                          "Which choice has to remember something from EARLIER?",
+                          "The lock that remembers earlier digits. That kind of circuit is SEQUENTIAL (Level 6)."),
                         ok="Combinational = no memory. Sequential = has memory."),
         ],
         "done": ("sim", "ha", dict(A=1, B=1)),
@@ -203,10 +207,10 @@ def stage_half():
 def stage_full():
     frames = [
         (dict(A=1, B=1, Cin=0),
-         "1 + 1 + 0 = 2 = binary 10. The first half adder gives Sum 0, Carry 1. The second adds Cin 0. "
+         "1 + 1 + 0 = 2 = binary 10. HA 1 adds A and B: Sum 0, Carry 1. HA 2 adds Cin 0. "
          "So Sum = 0, Cout = 1."),
         (dict(A=0, B=1, Cin=1),
-         "0 + 1 + 1 = 2 = binary 10. First half adder: Sum 1. The second adds Cin 1: Sum 0 and it carries. "
+         "0 + 1 + 1 = 2 = binary 10. HA 1 gives Sum 1. HA 2 adds Cin 1: Sum 0 and it carries. "
          "So Sum = 0, Cout = 1."),
         (dict(A=1, B=1, Cin=1),
          "1 + 1 + 1 = 3 = binary 11. Sum = 1 and Cout = 1. This is the only row with three 1s."),
@@ -217,19 +221,19 @@ def stage_full():
     return {
         "id": "c2_full", "title": "Full adder", "sub": "adding three bits", "gates": [],
         "brief": [
-            "WHAT IS IT FOR? Numbers have many columns. From the second column on, you add THREE "
+            "WHAT IS IT FOR? Big numbers have many columns. From the 2nd column on, you add THREE "
             "bits: A, B and the carry from the column before.",
-            "Rule: Sum = A xor B xor Cin. Cout = 1 when at least two inputs are 1.",
+            "Rule: Sum = A xor B xor Cin. Cout = 1 when two or more inputs are 1.",
         ],
         "steps": [
             frames_step("fa", [{"vals": v, "caption": c} for v, c in frames],
-                        "Watch four additions. Notice the two half adders (HA 1, HA 2)."),
+                        "Watch four additions. Spot the two half adders (HA 1, HA 2)."),
             see_step("fa", [("rows", 8)], "Flip A, B and Cin. Find all 8 rows.",
                      H("Click the switches (or press 1, 2, 3). The highlighted row moves in the table.",
                        "Rows go 000, 001, 010 ... 111. Try to light up every row once.",
                        "Count in binary with the switches: 000, 001, 010, 011, 100, 101, 110, 111.")),
             table_step("fa", ["Sum", "Cout"], "Fill the Sum and Cout columns for all 8 rows.",
-                       H("Count the 1s among A, B and Cin. Write that count in binary: left digit = Cout, right digit = Sum.",
+                       H("Count the 1s among A, B and Cin. Write the count in binary: LEFT digit = Cout, RIGHT digit = Sum.",
                          "One 1 gives 01 (Sum 1). Two 1s give 10 (Cout 1). Three 1s give 11.",
                          "Sum column: 0 1 1 0 1 0 0 1.   Cout column: 0 0 0 1 0 1 1 1."),
                        exam="Design full adder with truth table & logic diagram."),
@@ -237,7 +241,7 @@ def stage_full():
                         "Which expression do they give?",
                         ["AB + AC + BC", "A + B + C", "ABC", "A xor B xor C"], "AB + AC + BC",
                         "Read the three loops of the Cout map.",
-                        H("Each loop is two touching 1s. Read each loop as in the K-map level.",
+                        H("Each loop covers two touching 1s. Read each loop like you did in the K-map level.",
                           "Loops: cells 110+111 = AB, cells 101+111 = AC, cells 011+111 = BC.",
                           "Cout = AB + AC + BC (any two of the three inputs ON)."),
                         ok="Cout = AB + A.Cin + B.Cin.", visual="kmap",
@@ -247,8 +251,8 @@ def stage_full():
                          "Loop the four corners", "Loop all the 1s into one big loop", "Sum is always 1"],
                         "Nothing can be looped: it stays as an XOR",
                         "Look at where the 1s sit.",
-                        H("A loop needs two touching 1s. Do any 1s touch?",
-                          "In a checkerboard every 1 has only 0s as neighbours.",
+                        H("A loop needs two 1s that touch. Do any 1s touch here?",
+                          "In a checkerboard, every 1 has only 0s next to it.",
                           "No loops are possible, so Sum cannot be shortened: Sum = A xor B xor Cin."),
                         ok="A checkerboard map is the sign of XOR.", visual="kmap",
                         kmap=(3, sum_ones, False), tag=EXAM),
@@ -260,16 +264,16 @@ def stage_full():
                         "a2": "HA 2's carry is 1 when its two inputs are BOTH 1: AND.",
                         "o": "Either half adder can make the carry. 'Either one' = OR."},
                        "Complete the logic diagram: two half adders and one more gate.",
-                       H("Each half adder is XOR (sum) plus AND (carry). Two half adders = 2 XOR + 2 AND.",
-                         "The two carries are joined by a gate that says 'either one'.",
+                       H("Each half adder is XOR (sum) + AND (carry). Two half adders = 2 XOR + 2 AND.",
+                         "The two carries are joined by a gate that means 'either one'.",
                          "HA1: XOR and AND. HA2: XOR and AND. Last gate: OR."),
                        exam="Design full adder with truth table & logic diagram."),
             choice_step("The Sum column is 1 on rows 1, 2, 4, 7, so Sum = Sum m(1, 2, 4, 7). "
                         "Which list is the Cout column?",
                         [_mt(cout_ones), _mt(sum_ones), "Sum m(0, 3, 5, 6)", "Sum m(1, 3, 5, 7)"], _mt(cout_ones),
-                        "Level 4 link: pick the minterm list of Cout.",
-                        H("Cout is 1 when at least two inputs are 1. Which row numbers have two or three 1s?",
-                          "Rows 011, 101, 110 and 111 have two or more 1s. Convert them to numbers.",
+                        "Level 4 link: pick the list of rows where Cout is 1.",
+                        H("Cout is 1 when two or more inputs are 1. Which rows have two or three 1s?",
+                          "Rows 011, 101, 110 and 111 have two or more 1s. Turn them into numbers.",
                           "Cout = Sum m(3, 5, 6, 7)."),
                         ok="Cout = Sum m(3, 5, 6, 7)."),
         ],
@@ -301,20 +305,20 @@ def stage_sub():
         ],
         "steps": [
             frames_step("hs", [{"vals": v, "caption": c} for v, c in fr],
-                        "Watch the four subtractions. Press NEXT."),
+                        "Watch the four subtractions. Click NEXT."),
             see_step("hs", [("rows", 4)], "Flip A and B. Try all four rows. Find the borrow.",
                      H("Click the switches. Which row makes the Borrow bulb light?",
                        "Borrow lights only when you take a BIG number from a SMALL one.",
                        "Set A = 0 and B = 1: that is the only borrow row.")),
             table_step("hs", ["Diff", "Borrow"], "Predict: fill Diff (A - B) and Borrow.",
-                       H("Diff = A - B written in one digit. Borrow = 1 when A is smaller than B.",
-                         "Row 0 1: 0 - 1 needs a borrow: Diff = 1, Borrow = 1.",
+                       H("Diff = A - B written as one digit. Borrow = 1 when A is smaller than B.",
+                         "Row 0 1: 0 - 1 needs a borrow, so Diff = 1 and Borrow = 1.",
                          "Diff column: 0 1 1 0.   Borrow column: 0 1 0 0.")),
             slots_step("hs", {"d": "XOR", "b": "AND"}, {"d": "makes DIFF", "b": "makes BORROW"},
                        {"d": "Diff is 1 when the bits are different, like the adder's Sum: XOR.",
                         "b": "Borrow = (NOT A) AND B. The NOT gate is already there, so you need AND."},
                        "Build the half subtractor: choose the gate for each ?.",
-                       H("Compare with the half adder: one gate is the same, one has a NOT in front.",
+                       H("Compare with the half adder: one gate is the same, and one has a NOT gate in front.",
                          "Diff column 0 1 1 0 is XOR. Borrow is ON when NOT A and B are both ON.",
                          "DIFF = XOR.  BORROW = AND (fed by NOT A and B).")),
             table_step("fs", ["Diff", "Bout"], "Fill Diff and Bout (borrow out) for all 8 rows.",
@@ -325,9 +329,9 @@ def stage_sub():
             choice_step("The Diff column is 1 on rows 1, 2, 4, 7: the same list as the adder's Sum. "
                         "Which list is Bout (borrow out)?",
                         [_mt(bout), _mt({3, 5, 6, 7}), _mt({1, 2, 4, 7}), "Sum m(0, 4, 5, 6)"], _mt(bout),
-                        "Level 4 link: pick the minterm list of Bout.",
-                        H("Bout is 1 on rows 001, 010, 011 and 111 of your table.",
-                          "Convert those rows to numbers: 1, 2, 3 and 7.",
+                        "Level 4 link: pick the list of rows where Bout is 1.",
+                        H("Look at your table. Bout is 1 on rows 001, 010, 011 and 111.",
+                          "Turn those rows into numbers: 1, 2, 3 and 7.",
                           "Bout = Sum m(1, 2, 3, 7) = A'B + A'Bin + B.Bin."),
                         ok="Bout = A'B + A'Bin + B.Bin.", tag=EXAM),
             slots_step("fs", {"b1": "AND", "d1": "XOR", "b2": "AND", "d2": "XOR", "o": "OR"},
@@ -338,8 +342,8 @@ def stage_sub():
                         "d2": "HS 2 diff = first diff xor Bin. This is the final DIFF: XOR.",
                         "o": "Either half subtractor may need a borrow: 'either one' = OR."},
                        "Complete the logic diagram: two half subtractors and one more gate.",
-                       H("Same shape as the full adder: two halves and a joiner.",
-                         "Each half subtractor is XOR (diff) plus AND (borrow, with a NOT in front).",
+                       H("Same shape as the full adder: two halves and one joining gate.",
+                         "Each half subtractor is XOR (diff) + AND (borrow, with a NOT in front).",
                          "HS1: AND + XOR. HS2: AND + XOR. Last gate: OR."),
                        exam="Design full subtractor with truth table & logic diagram."),
         ],
@@ -375,7 +379,7 @@ def stage_chain():
         "id": "c4_chain", "title": "Adder chains", "sub": "4-bit adder, adder-subtractor", "gates": [],
         "brief": [
             "WHAT IS IT FOR? To add 6 + 3 you need one full adder per bit. Chain them: each "
-            "carry-out feeds the carry-in of its left neighbour. One XOR trick makes it subtract too.",
+            "carry-out feeds the next adder on its left. One XOR trick also makes it subtract.",
             "Rule: A - B = A + (flipped B) + 1.",
         ],
         "steps": [
@@ -384,20 +388,20 @@ def stage_chain():
             see_step("add4", [("pred", "Make Cout light up", lambda v, o: o["Cout"] == 1)],
                      "Flip the switches until the adder overflows: Cout must light.",
                      H("Cout lights when the answer is too big for 4 bits (16 or more).",
-                       "Try 1111 + 0001: set A3 A2 A1 A0 = 1 and B0 = 1.",
+                       "Try 1111 + 0001: turn on A3, A2, A1, A0 and B0.",
                        "Turn on A3, A2, A1, A0 and B0. 15 + 1 = 16 needs a fifth bit."), tag=SYLL),
             bits_step(["A = 0101 (5)", "B = 0111 (7)", "Cin = 0"], ["Cout", "S3", "S2", "S1", "S0"],
                       [0, 1, 1, 0, 0],
                       "Predict 5 + 7: light the bulbs of the answer.",
-                      H("Add 5 + 7 in ordinary maths first, then write the answer in binary on 5 bulbs.",
-                        "5 + 7 = 12 = 8 + 4. Place values from the right: 1, 2, 4, 8.",
+                      H("Add 5 + 7 in ordinary maths first. Then write the answer in binary on the 5 bulbs.",
+                        "5 + 7 = 12 = 8 + 4. The place values from the right are 1, 2, 4, 8.",
                         "12 = 01100: Cout 0, S3 1, S2 1, S1 0, S0 0."), tag=SYLL),
             choice_step("An XOR gate has B on one input and M on the other. What does it do to B when M = 1?",
                         ["It flips B (0 becomes 1, 1 becomes 0)", "It keeps B the same",
                          "It forces B to 0", "It forces B to 1"],
                         "It flips B (0 becomes 1, 1 becomes 0)",
-                        "Look at the XOR table, rows with M = 1.",
-                        H("XOR gives 1 when its inputs are DIFFERENT.",
+                        "Look at the table, the rows with M = 1.",
+                        H("XOR gives 1 when its two inputs are DIFFERENT.",
                           "With M = 1: B = 0 gives 1, and B = 1 gives 0.",
                           "The output is the opposite of B: it flips B."),
                         ok="XOR with 1 = NOT. XOR with 0 = leave alone.", visual="xor", tag=SYLL),
@@ -406,15 +410,15 @@ def stage_chain():
             see_step("addsub",
                      [("pred", "Try M = 0 (add)", lambda v, o: v["M"] == 0 and (v["B0"] or v["B1"] or v["B2"] or v["B3"])),
                       ("pred", "Try M = 1 (subtract)", lambda v, o: v["M"] == 1 and (v["B0"] or v["B1"] or v["B2"] or v["B3"]))],
-                     "Set some bits of A and B. Try both M = 0 and M = 1.",
+                     "Turn on some A and B bits. Try both M = 0 and M = 1.",
                      H("Turn on a few A and B switches, then flip M.",
                        "M is the switch on the right. Watch the XOR row flip B when M = 1.",
                        "Set B0 = 1 and A0 = 1, then try M = 0 and M = 1."), tag=SYLL),
             bits_step(["A = 1001 (9)", "B = 0100 (4)", "M = 1  (subtract)"],
                       ["Cout", "S3", "S2", "S1", "S0"], [1, 0, 1, 0, 1],
                       "Work out 9 - 4 with the circuit: light Cout and S3 to S0.",
-                      H("M = 1: flip B, then add A + flipped B + 1.",
-                        "B = 0100 flips to 1011. Now 1001 + 1011 + 1 = ?",
+                      H("M = 1 means: flip B, then add A + flipped B + 1.",
+                        "B = 0100 flips to 1011. Now work out 1001 + 1011 + 1.",
                         "9 + 11 + 1 = 21 = 10101: Cout 1, S = 0101 (that is 5)."), tag=SYLL),
         ],
         "done": ("table", ["M", "B", "B xor M"], [["0", "0", "0"], ["0", "1", "1"], ["1", "0", "1"], ["1", "1", "0"]]),
@@ -448,7 +452,7 @@ def stage_parity():
                         "Watch four messages get their parity bit."),
             see_step("par4", [("rows", 8)], "Flip A to D. Find 8 different messages.",
                      H("Click the switches (or press 1 to 4). Watch P and the table.",
-                       "P changes every time the number of 1s in A B C D goes from even to odd.",
+                       "P changes each time the number of 1s in A B C D goes from even to odd.",
                        "Just try 8 different combinations. Any 8 will do.")),
             choice_step("XOR gives 1 when its two inputs differ. 1 xor 1 = 0, then 0 xor 1 = 1. "
                         "What does a chain of XORs tell you about the bits?",
@@ -457,11 +461,11 @@ def stage_parity():
                         "It is 1 when the number of 1s is ODD",
                         "Say it in words: when is the XOR chain ON?",
                         H("Each 1 flips the running answer. Start at 0 and flip once for every 1.",
-                          "Flip an odd number of times and you end on 1.",
+                          "If you flip an odd number of times, you end on 1.",
                           "ON when the number of 1s is odd. That is exactly what we need for P."),
                         ok="P = 1 exactly when the message has an odd number of 1s."),
             table_step("par4", ["P"], "Fill the even-parity bit P for all 16 messages (click a 0 to make it 1).",
-                       H("P = 1 when the message A B C D has an ODD number of 1s. Count them.",
+                       H("P = 1 when the message A B C D has an ODD number of 1s. Count the 1s in each row.",
                          "Rows with one 1 or three 1s need P = 1. Rows with 0, 2 or 4 ones keep P = 0.",
                          "P = 1 on rows " + ", ".join(map(str, odd)) + "."),
                        default=0, exam="Design an even parity bit generator for 4 bit input."),
@@ -469,7 +473,7 @@ def stage_parity():
                         ["P = A xor B xor C xor D = " + _mt(odd), "P = ABCD", "P = A + B + C + D",
                          "P = A xor B xor C xor D = " + _mt(even)],
                         "P = A xor B xor C xor D = " + _mt(odd),
-                        "Pick the right expression and minterm list.",
+                        "Pick the right expression and row list.",
                         H("P is 1 on the messages with an ODD number of 1s.",
                           "Which list holds the numbers 1, 2, 4, 7, 8 ...? Those have one or three 1s.",
                           "P = A xor B xor C xor D = " + _mt(odd) + "."),
@@ -481,13 +485,13 @@ def stage_parity():
                         "p": "Join the two pair-results the same way: XOR."},
                        "Draw the logic diagram of the generator: choose the three gates.",
                        H("Every gate does the same job: it passes on 'odd number of 1s'.",
-                         "A chain (or tree) of the same gate, three times.",
+                         "It is the same gate, used three times.",
                          "All three gates are XOR."),
                        exam="Design an even parity bit generator for 4 bit input."),
             see_step("parchk",
                      [("pred", "Make Error light up (a damaged message)", lambda v, o: o["Error"] == 1),
                       ("pred", "Make Error = 0 with 2 or more 1s", lambda v, o: o["Error"] == 0 and sum(v.values()) >= 2)],
-                     "CHECKER: A to D is the message, P the parity bit received. Flip one bit and watch Error.",
+                     "CHECKER: A to D is the message, P is the parity bit received. Flip one bit and watch Error.",
                      H("Start with a good message plus its P (an even count of 1s), then flip ONE switch.",
                        "Try A = 1, B = 1 (and P = 0): Error = 0. Now flip P: Error = 1.",
                        "Good: A = 1, B = 1. Damaged: A = 1, B = 1, P = 1."),
@@ -541,8 +545,8 @@ def stage_gray():
                          "Every G bit = B3 xor B2 xor B1 xor B0"],
                         "G3 = B3, G2 = B3 xor B2, G1 = B2 xor B1, G0 = B1 xor B0",
                         "Check your table against each set of equations.",
-                        H("Test 0110 -> 0101 in each option. G3 must be 0, G2 must be 1.",
-                          "The left bit is copied; each other bit XORs with the bit on its left.",
+                        H("Test 0110 -> 0101 in each option. G3 must be 0 and G2 must be 1.",
+                          "The left bit is copied. Each other bit is XORed with the bit on its left.",
                           "G3 = B3, G2 = B3 xor B2, G1 = B2 xor B1, G0 = B1 xor B0."),
                         ok="Copy the left bit, XOR the rest in pairs.", tag=EXAM),
             slots_step("b2g", {"g2": "XOR", "g1": "XOR", "g0": "XOR"},
@@ -550,16 +554,16 @@ def stage_gray():
                        {"g2": "G2 = B3 xor B2.", "g1": "G1 = B2 xor B1.", "g0": "G0 = B1 xor B0."},
                        "Draw the converter: choose the gate for G2, G1 and G0.",
                        H("Each Gray bit is made from two neighbouring binary bits.",
-                         "The rule for each pair is the same gate every time.",
+                         "The rule for each pair uses the same gate every time.",
                          "All three are XOR. (G3 is just a wire from B3.)"),
                        exam="Design a 4-bit binary to Gray code converter."),
             frames_step("g2b", [{"vals": gv, "caption": c} for c in (
                 "Now the other way. Gray 1 0 1 1. B3 = G3 = 1 (copy the left bit).",
                 "B2 = B3 xor G2 = 1 xor 0 = 1.",
-                "B1 = B2 xor G1 = 1 xor 1 = 0. Use the BINARY bit just found.",
+                "B1 = B2 xor G1 = 1 xor 1 = 0. Use the BINARY bit you just found.",
                 "B0 = B1 xor G0 = 0 xor 1 = 1. So Gray 1011 is binary 1101 (13).")],
-                "Watch Gray to binary. Each step XORs with the previous binary bit.", tag=EXAM),
-            bits_step(["Gray = 1 1 1 0", "B3 = G3. Then each B = (previous B) xor (this G)."],
+                "Watch Gray to binary. Each step XORs with the binary bit found before.", tag=EXAM),
+            bits_step(["Gray = 1 1 1 0", "B3 = G3. Then B = (previous B) xor (this G)."],
                       ["B3", "B2", "B1", "B0"], [1, 0, 1, 1],
                       "Convert Gray 1110 to binary: light the bulbs.",
                       H("B3 = 1. Then B2 = B3 xor G2, and so on, using the binary bit you just found.",
@@ -587,7 +591,7 @@ def stage_decoder():
         "id": "c7_decoder", "title": "Decoder", "sub": "a code in, ONE wire out", "gates": [],
         "brief": [
             "WHAT IS IT FOR? A decoder turns a CODE into ONE chosen wire, like a lift panel: "
-            "the code for floor 2 lights only lamp 2. De-code means un-code.",
+            "the code for floor 2 lights only lamp 2.",
             "Rule: n inputs give 2^n outputs. Output Yk is ON when the input code is k.",
         ],
         "steps": [
@@ -599,41 +603,41 @@ def stage_decoder():
                        "Try 00, 01, 10 and 11.")),
             choice_step("A 2-to-4 decoder gets A = 1 and B = 0. Which output line lights?",
                         ["Y0", "Y1", "Y2", "Y3"], "Y2", "Read the input as a binary number.",
-                        H("A B = 1 0 is a binary number. What number is 10?",
+                        H("A B = 1 0 is a binary number. Which number is 10?",
                           "10 in binary = 2.",
                           "Y2 lights."),
                         ok="Binary 10 = 2, so Y2.", visual="sim", sim="dec2", vals=dict(A=1, B=0)),
             slots_step("dec2", {f"y{m}": "AND" for m in range(4)}, {f"y{m}": f"Y{m}" for m in range(4)},
                        {f"y{m}": f"Y{m} needs both of its two input wires ON at once: AND." for m in range(4)},
                        "Draw the logic diagram: which gate sits at every output?",
-                       H("Each output is ON for ONE input code only: both wires into it must be ON.",
+                       H("Each output is ON for ONE input code only. Both wires going into it must be ON.",
                          "The gate that needs both inputs ON is AND (the NOT gates are already placed).",
                          "All four are AND."),
                        exam="Explain 2 to 4 line Decoder with logic diagram and truth table."),
             see_step("dec3", [("rows", 6)], "Now 3 inputs and 8 lines. Try 6 different codes.",
                      H("Click the switches (or press 1 to 3).",
-                       "Watch the one lit bulb walk down Y0 ... Y7.",
+                       "Watch the one lit bulb move along Y0 ... Y7.",
                        "Try 000, 001, 010, 011, 100 and 101."),
                      note="Three input bits give 2 x 2 x 2 = 8 lines."),
             table_step("dec3", [f"Y{m}" for m in range(8)],
                        "Fill the 3-to-8 truth table: click the single 1 on each row.",
                        H("In each row exactly ONE output is 1: the one whose number equals the input code.",
-                         "Row 000 -> Y0, row 001 -> Y1, row 010 -> Y2 ... row 111 -> Y7 (a diagonal).",
+                         "Row 000 -> Y0, row 001 -> Y1, row 010 -> Y2 ... row 111 -> Y7 (a diagonal line of 1s).",
                          "Put a 1 on the diagonal: row k has its 1 in column Yk."),
                        default=0, exam="Design 3 to 8 line decoder with logic diagram and truth table."),
             choice_step("In your 3-to-8 decoder, which product term drives Y5? (5 = 101)",
                         ["A B' C", "A' B C'", "A B C'", "A' B' C"], "A B' C",
-                        "Write 101 as letters: 1 = plain letter, 0 = letter with a bar.",
-                        H("5 in binary is 101. A is 1, B is 0, C is 1.",
-                          "A stays plain, B gets a bar, C stays plain.",
+                        "Write 101 as letters: 1 = plain letter, 0 = letter with a bar (').",
+                        H("5 in binary is 101. So A is 1, B is 0, C is 1.",
+                          "A stays plain, B gets a bar ('), C stays plain.",
                           "Y5 = A B' C (minterm m5)."),
                         ok="Y5 = m5 = A B' C. Level 4 minterms again!", tag=EXAM),
             choice_step("Cout of the full adder is Sum m(3, 5, 6, 7). With a 3-to-8 decoder and ONE OR gate, "
                         "which outputs go into the OR gate?",
                         ["Y3, Y5, Y6, Y7", "Y1, Y2, Y4, Y7", "Y0, Y1, Y2, Y4", "All eight"],
-                        "Y3, Y5, Y6, Y7", "Use the minterm list as a shopping list.",
-                        H("A decoder output IS a minterm. OR them to make the function.",
-                          "The function is ON for minterms 3, 5, 6 and 7.",
+                        "Y3, Y5, Y6, Y7", "Use the list of numbers as a shopping list.",
+                        H("A decoder output IS a minterm. OR them together to make the function.",
+                          "The function is ON for rows 3, 5, 6 and 7.",
                           "OR together Y3, Y5, Y6 and Y7."),
                         ok="Any Sum m(...) = OR of those decoder outputs."),
         ],
@@ -679,28 +683,28 @@ def stage_mux():
                      note="2 select lines give 2^2 = 4 choices."),
             choice_step("An 8:1 MUX has S2 S1 S0 = 1 0 1. Which data input reaches Y?",
                         ["I5", "I1", "I4", "I6"], "I5", "Read the select lines as a binary number.",
-                        H("S2 S1 S0 = 1 0 1 is a binary number. Which number?",
+                        H("S2 S1 S0 = 1 0 1 is a binary number. Which number is it?",
                           "101 = 4 + 0 + 1.",
                           "5, so Y copies I5."),
                         ok="Select code k picks data input Ik."),
             mux_step(ones_sum, 3, 3, ["A", "B", "C"], "", "F(A,B,C) = Sum m(1, 2, 4, 7)",
                      ["0", "1"],
                      "Warm-up: 8:1 MUX, 3 variables. Put 0 or 1 on every data input.",
-                     H("A, B, C are the select lines. Data input Ik gets 1 if minterm mk is in the list.",
-                       "The list is 1, 2, 4, 7. So I1, I2, I4 and I7 get 1.",
+                     H("A, B, C are the select lines. Data input Ik gets 1 if the number k is in the list.",
+                       "The list is 1, 2, 4, 7. So I1, I2, I4 and I7 get 1. All others get 0.",
                        "I0..I7 = 0 1 1 0 1 0 0 1.")),
             mux_step(ones_sum, 3, 2, ["A", "B"], "C", "F(A,B,C) = Sum m(1, 2, 4, 7)",
                      ["0", "1", "C", "C'"],
                      "Fill I0 to I3: A, B select and C goes to the data inputs.",
-                     H("For each select code AB, look at the two rows (C = 0 and C = 1) beside it.",
-                       "If F = 0, 0 -> put 0.  1, 1 -> put 1.  0, 1 -> put C.  1, 0 -> put C'.",
+                     H("For each select code AB, read the two numbers beside the slot (C = 0, then C = 1).",
+                       "Both 0 -> put 0.  Both 1 -> put 1.  0 then 1 -> put C.  1 then 0 -> put C'.",
                        "I0 = C, I1 = C', I2 = C', I3 = C."),
                      exam="Use 4*1 Mux to implement the logic function F = Sum m(1, 2, 4, 7)."),
             mux_step(ones_4v, 4, 3, ["A", "B", "C"], "D", "F(A,B,C,D) = Sum m(1, 3, 4, 11, 12, 13, 14, 15)",
                      ["0", "1", "D", "D'"],
                      "Fill I0 to I7: A, B, C select and D goes to the data inputs.",
-                     H("Pair the rows: select ABC = 000 owns m0 and m1 (D = 0 and D = 1), ABC = 001 owns m2 and m3 ...",
-                       "Look at the two values beside each slot: 0,1 -> D.  1,0 -> D'.  0,0 -> 0.  1,1 -> 1.",
+                     H("Each slot owns two rows: ABC = 000 owns m0 and m1 (D = 0, then D = 1), ABC = 001 owns m2 and m3 ...",
+                       "Read the two numbers beside the slot: 0,1 -> D.  1,0 -> D'.  0,0 -> 0.  1,1 -> 1.",
                        "I0..I7 = " + ", ".join(e8) + "."),
                      exam="Use 8*1 MUX to implement the logic function F = Sum m(1, 3, 4, 11, 12, 13, 14, 15)."),
             choice_step("How many select lines does a 16:1 MUX need?",
@@ -727,7 +731,7 @@ def stage_boss():
         "brief": [
             "Final test. One question from each topic: adder, subtractor, parity, decoder, MUX "
             "and the adder-subtractor.",
-            "Work like in the exam. You still have 3 hints on each.",
+            "Work like in the exam. You still have 3 hints on each question.",
         ],
         "steps": [
             choice_step("A full adder gets A = 1, B = 0 and Cin = 1. What are Cout and Sum?",
@@ -740,7 +744,7 @@ def stage_boss():
             choice_step("A full subtractor gets A = 0, B = 1 and Bin = 1. What are Bout and Diff?",
                         ["Bout 1, Diff 0", "Bout 0, Diff 1", "Bout 1, Diff 1", "Bout 0, Diff 0"], "Bout 1, Diff 0",
                         "Subtract and decide if a borrow is needed.",
-                        H("0 - 1 - 1 is negative, so a borrow is needed.",
+                        H("0 - 1 - 1 is a negative answer, so a borrow is needed.",
                           "Diff = A xor B xor Bin = 0 xor 1 xor 1.",
                           "Bout = 1 and Diff = 0."),
                         ok="Diff = 0 xor 1 xor 1 = 0, and it borrows.", visual="sim", sim="fs",
@@ -754,20 +758,20 @@ def stage_boss():
             choice_step("A receiver gets message 1 0 1 1 and parity bit 0 (even parity is used). Is it OK?",
                         ["Error: odd number of 1s", "OK: even number of 1s"], "Error: odd number of 1s",
                         "Count ALL the 1s received, parity bit included.",
-                        H("Count the 1s in 1 0 1 1 and add the parity bit.",
-                          "1 0 1 1 has three 1s, the parity bit adds none.",
+                        H("Count the 1s in 1 0 1 1, then add the parity bit.",
+                          "1 0 1 1 has three 1s. The parity bit 0 adds none.",
                           "Three is odd, so there is an error."),
                         ok="Even parity needs an EVEN count.", tag=EXAM),
             choice_step("A 3-to-8 decoder gets A B C = 1 1 0. Which output line is ON?",
                         ["Y6", "Y3", "Y5", "Y7"], "Y6", "Read the input as a binary number.",
-                        H("110 in binary is which number?",
+                        H("Which number is 110 in binary?",
                           "4 + 2 + 0.",
                           "Y6 (minterm m6)."),
                         ok="110 = 6, so Y6.", visual="sim", sim="dec3", vals=dict(A=1, B=1, C=0), tag=EXAM),
             mux_step({3, 5, 6, 7}, 3, 2, ["A", "B"], "C", "F(A,B,C) = Sum m(3, 5, 6, 7)   (practice function)",
                      ["0", "1", "C", "C'"],
                      "Practice: the full adder's Cout on a 4:1 MUX. A and B select, C goes to the data inputs.",
-                     H("For each select code AB, look at the two rows beside it (C = 0 and C = 1).",
+                     H("For each select code AB, read the two numbers beside the slot (C = 0, then C = 1).",
                        "AB = 00: 0,0.  AB = 01: 0,1.  AB = 10: 0,1.  AB = 11: 1,1.",
                        "I0 = 0, I1 = C, I2 = C, I3 = 1."), exam="Use 4*1 MUX (practice function)."),
             choice_step("An adder-subtractor has M = 1 and B = 0 1 1 0. What do the XOR gates give, "
@@ -834,6 +838,29 @@ class BasicCombinationalPuzzle(BasicGatesPuzzle):
         if sim["net"] is not None and sim["draw"] is None:
             return [i["name"] for i in sim["net"].inputs]
         return sim["inputs"]
+
+    # ---------------- text fitting (keeps every label inside its box) ----------------
+    def _fit_img(self, text, color, width, fonts=None):
+        """Render text in the biggest font that fits `width`; shorten with '...' as a last resort."""
+        for font in (fonts or (self.f_small, self.f_tiny)):
+            img = font.render(text, True, color)
+            if img.get_width() <= width:
+                return img
+        font = self.f_tiny
+        t = text
+        while len(t) > 4 and font.size(t + "...")[0] > width:
+            t = t[:-1]
+        return font.render(t.rstrip() + "...", True, color)
+
+    def _wrapped_block(self, text, width, max_h, fonts):
+        """Pick the first (font, line height) whose wrapped text fits `max_h`. Returns (font, lh, lines)."""
+        font, lh, lines = fonts[-1][0], fonts[-1][1], []
+        for font, lh in fonts:
+            lines = wrap_text(font, text, width)
+            if len(lines) * lh <= max_h:
+                break
+        lines = lines[:max(1, max_h // lh)]
+        return font, lh, lines
 
     # ---------------- step state ----------------
     def _enter_step(self):
@@ -1026,7 +1053,7 @@ class BasicCombinationalPuzzle(BasicGatesPuzzle):
             if st["seen"] >= len(step["frames"]):
                 self._advance("")
             else:
-                self._say(f"Look at every picture first ({st['seen']}/{len(step['frames'])}).", False)
+                self._say(f"Look at every picture first ({st['seen']}/{len(step['frames'])}). Click NEXT.", False)
         elif kind == "csee":
             missing = [i for i in range(len(step["goals"])) if i not in st["done"]]
             if not missing:
@@ -1034,7 +1061,7 @@ class BasicCombinationalPuzzle(BasicGatesPuzzle):
             else:
                 g = step["goals"][missing[0]]
                 if g[0] == "rows":
-                    self._say(f"Try more rows ({len(st['rows'])}/{g[1]} so far).", False)
+                    self._say(f"Try more rows ({len(st['rows'])}/{g[1]} so far). Flip the switches.", False)
                 else:
                     self._say("Not yet: " + g[1] + ".", False)
         elif kind == "ctable":
@@ -1048,7 +1075,7 @@ class BasicCombinationalPuzzle(BasicGatesPuzzle):
                 self._right()
             else:
                 n = sum(1 for x, y in zip(st["bits"], step["target"]) if x != y)
-                self._wrong(f"Not yet: {n} bulb(s) differ. Work it out column by column.")
+                self._wrong(f"Not yet: {n} bulb(s) are wrong. Work it out one column at a time.")
         else:
             super()._check()
 
@@ -1056,7 +1083,7 @@ class BasicCombinationalPuzzle(BasicGatesPuzzle):
         step, st = self.step, self.st
         sim, rows, cols, exp = self._table_spec(step)
         if any(v is None for v in st["cells"].values()):
-            self._say("Fill every cell first (select it, then press 0 or 1).", False)
+            self._say("Fill every cell first (click a cell, then press 0 or 1).", False)
             return
         bad = {(r, c) for r in range(len(rows)) for c in range(len(cols))
                if st["cells"][(r, c)] != exp[r][c]}
@@ -1066,7 +1093,7 @@ class BasicCombinationalPuzzle(BasicGatesPuzzle):
             return
         r, c = min(bad)
         names = ", ".join(f"{n} = {v}" for n, v in zip(sim["tin"], rows[r]))
-        self._wrong(f"{len(bad)} cell(s) wrong. Check the {cols[c]} cell of the row with {names}.")
+        self._wrong(f"{len(bad)} cell(s) wrong (red boxes). Check the {cols[c]} cell of the row with {names}.")
 
     def _check_slots(self):
         step, st = self.step, self.st
@@ -1139,26 +1166,39 @@ class BasicCombinationalPuzzle(BasicGatesPuzzle):
 
     # ---------------- drawing: shared ----------------
     def _note_lines(self, screen, text, y=None, color=CYAN, n=2):
+        """Draw a short note at the top of the work area. Returns the y just below it.
+
+        Uses the normal font; if the text needs more than n lines it switches to the
+        small font and allows one extra line, so nothing is cut off mid-sentence."""
         y = WORK.y + 12 if y is None else y
-        for line in wrap_text(self.f_small, text, WORK.width - 36)[:n]:
-            screen.blit(self.f_small.render(line, True, color), (WORK.x + 18, y))
-            y += 22
+        width = WORK.width - 36
+        font, lh = self.f_small, 22
+        lines = wrap_text(font, text, width)
+        if len(lines) > n:
+            font, lh = self.f_tiny, 18
+            lines = wrap_text(font, text, width)
+            n += 1
+        if len(lines) > n:
+            lines = lines[:n]
+            lines[-1] = lines[-1].rstrip() + " ..."
+        for line in lines:
+            screen.blit(font.render(line, True, color), (WORK.x + 18, y))
+            y += lh
         return y
 
     def _readout(self, screen, y, sim, vals, lines=2):
         outs = CL.sim_outs(sim, vals)
         if sim["readout"]:
             for line in sim["readout"](vals, outs)[:lines]:
-                for sub in wrap_text(self.f_small, line, WORK.width - 36)[:1]:
-                    screen.blit(self.f_small.render(sub, True, WHITE), (WORK.x + 18, y))
-                    y += 22
+                screen.blit(self._fit_img(line, WHITE, WORK.width - 36), (WORK.x + 18, y))
+                y += 22
 
     # ---------------- drawing: csee ----------------
     def _draw_csee(self, screen):
         step, st = self.step, self.st
         sim = self.sim
-        self._note_lines(screen, step.get("note") or ("WHAT IS IT FOR?  " + sim["purpose"]), n=2)
-        top = WORK.y + 58
+        y_note = self._note_lines(screen, step.get("note") or ("WHAT IS IT FOR?  " + sim["purpose"]), n=2)
+        top = max(WORK.y + 58, y_note + 6)
         bottom = WORK.bottom - 92
         tv = CL.table_view(sim, st["vals"])
         tab_w = 0
@@ -1174,14 +1214,24 @@ class BasicCombinationalPuzzle(BasicGatesPuzzle):
 
     def _goal_chips(self, screen):
         step, st = self.step, self.st
-        x = WORK.x + 18
-        y = WORK.bottom - 34
+        labels = []
         for i, g in enumerate(step["goals"]):
             label = f"{len(st['rows'])}/{g[1]} rows tried" if g[0] == "rows" else g[1]
             ok = i in st["done"]
             if g[0] == "rows" and ok:
                 label = f"{g[1]} rows tried"
-            img = self.f_small.render(("[x] " if ok else "[ ] ") + label, True, GREEN if ok else GREY)
+            labels.append((("[x] " if ok else "[ ] ") + label, GREEN if ok else GREY))
+        avail = WORK.width - 36
+        font = self.f_small
+        if sum(font.size(t)[0] for t, _c in labels) + 24 * (len(labels) - 1) > avail:
+            font = self.f_tiny
+        x = WORK.x + 18
+        y = WORK.bottom - 34
+        for text, col in labels:
+            img = font.render(text, True, col)
+            if x + img.get_width() > WORK.right - 12:       # still too wide: start a new line above
+                x = WORK.x + 18
+                y -= 20
             screen.blit(img, (x, y))
             x += img.get_width() + 24
 
@@ -1206,27 +1256,31 @@ class BasicCombinationalPuzzle(BasicGatesPuzzle):
         area = pygame.Rect(WORK.x + 8, WORK.y + 48, WORK.width - 16, WORK.height - 48 - 110)
         CL.render_sim(screen, sim, area, vals, CL.DARK, self.cfonts, hits=None,
                       active=frame.get("active"), in_keys=False)
+        # caption: biggest font whose lines fit the 96 px caption box
+        font, lh, lines = self._wrapped_block(
+            frame["caption"], WORK.width - 36, 96,
+            ((self.f_body, 24), (self.f_small, 22), (self.f_tiny, 19)))
         y = WORK.bottom - 100
-        for line in wrap_text(self.f_body, frame["caption"], WORK.width - 36)[:4]:
-            screen.blit(self.f_body.render(line, True, WHITE), (WORK.x + 18, y))
-            y += 24
+        for line in lines:
+            screen.blit(font.render(line, True, WHITE), (WORK.x + 18, y))
+            y += lh
 
     # ---------------- drawing: ctable ----------------
     def _draw_ctable(self, screen):
         step, st = self.step, self.st
         sim, rows, cols, exp = self._table_spec(step)
         note = step.get("note") or "Click a cell to flip it, or use the arrow keys and press 0 or 1."
-        self._note_lines(screen, note, n=2)
+        y_note = self._note_lines(screen, note, n=2)
         nin, nout = len(sim["tin"]), len(cols)
         nblocks = 2 if len(rows) > 8 else 1
         per = int(math.ceil(len(rows) / float(nblocks)))
         ncol = nin + nout
         cw = max(26, min(50, (WORK.width - 40 - (nblocks - 1) * 30) // (nblocks * ncol)))
-        rh = max(22, min(36, (WORK.height - 120) // (per + 1)))
+        y0 = max(WORK.y + 72, y_note + 8)
+        rh = max(22, min(36, (WORK.bottom - 34 - y0) // (per + 1)))
         width = ncol * cw
         total_w = nblocks * width + (nblocks - 1) * 30
         x0 = WORK.x + (WORK.width - total_w) // 2
-        y0 = WORK.y + 72
         for b in range(nblocks):
             bx = x0 + b * (width + 30)
             heads = list(sim["tin"]) + list(cols)
@@ -1258,6 +1312,12 @@ class BasicCombinationalPuzzle(BasicGatesPuzzle):
                     img = self.f_body.render(txt, True, col)
                     screen.blit(img, img.get_rect(center=r.center))
                     self.buttons.append((r, ("tcell", ri, c)))
+        # little key under the table (only when there is room for it)
+        table_bottom = y0 + (per + 1) * rh
+        if table_bottom + 22 <= WORK.bottom - 6:
+            key = "Yellow box = the cell you are on.   Red box = wrong, fix it.   ? = still empty."
+            screen.blit(self._fit_img(key, GREY, WORK.width - 36, (self.f_tiny,)),
+                        (WORK.x + 18, WORK.bottom - 24))
 
     # ---------------- drawing: cslots ----------------
     def _draw_cslots(self, screen):
@@ -1265,9 +1325,9 @@ class BasicCombinationalPuzzle(BasicGatesPuzzle):
         sim = self.sim
         ids = list(step["hidden"])
         n_left = sum(1 for i in ids if st["types"][i] is None)
-        self._note_lines(screen, step.get("note") or "Click a ? to choose its gate. "
-                         "Flip the switches to test your circuit.", n=2)
-        top, bottom = WORK.y + 58, WORK.bottom - 96
+        y_note = self._note_lines(screen, step.get("note") or "Click a ? to choose its gate. "
+                                  "Flip the switches to test your circuit.", n=2)
+        top, bottom = max(WORK.y + 58, y_note + 6), WORK.bottom - 96
         area = pygame.Rect(WORK.x + 8, top, WORK.width - 16, bottom - top)
         hover = None
         mp = pygame.mouse.get_pos()
@@ -1291,6 +1351,7 @@ class BasicCombinationalPuzzle(BasicGatesPuzzle):
                 if lab:
                     img = self.f_tiny.render(lab, True, YELLOW)
                     box = img.get_rect(midtop=(r.centerx, r.bottom + 3)).inflate(6, 2)
+                    box.clamp_ip(WORK)
                     pygame.draw.rect(screen, (11, 24, 38), box, border_radius=4)
                     screen.blit(img, img.get_rect(center=box.center))
             if hover:
@@ -1300,26 +1361,28 @@ class BasicCombinationalPuzzle(BasicGatesPuzzle):
                 r = info[hover]
                 tip = self.f_tiny.render(f"click: {cur or '?'} -> {nxt}", True, WHITE)
                 box = tip.get_rect(midbottom=(r.centerx, r.y - 6)).inflate(10, 6)
+                box.clamp_ip(WORK)
                 pygame.draw.rect(screen, (10, 20, 30), box, border_radius=5)
                 pygame.draw.rect(screen, YELLOW, box, 1, border_radius=5)
                 screen.blit(tip, tip.get_rect(center=box.center))
         # option buttons for the selected slot
         sel = ids[st["sel"]]
         y = WORK.bottom - 78
-        screen.blit(self.f_small.render(f"Selected: {step['labels'].get(sel, sel)}", True, YELLOW),
+        screen.blit(self._fit_img(f"Selected: {step['labels'].get(sel, sel)}", YELLOW, WORK.width - 36),
                     (WORK.x + 18, y))
+        n_opt = len(step["options"])
         for k, opt in enumerate(step["options"]):
             r = pygame.Rect(WORK.x + 18 + k * 96, y + 26, 88, 32)
             on = st["types"][sel] == opt
             self._button(screen, r, f"{k + 1}  {opt}", ("slotopt", opt), GREEN if on else GREY)
+        status_x = WORK.x + 18 + n_opt * 96 + 14            # always to the right of the last button
+        room = WORK.right - status_x - 10
         if n_left == 0:
             o = CL.sim_outs(sim, st["vals"])
             txt = "Output now:  " + "  ".join(f"{k}={o[k]}" for k in sim["outs"][:4])
-            room = WORK.right - (WORK.x + 300) - 10
-            font = self.f_small if self.f_small.size(txt)[0] <= room else self.f_tiny
-            screen.blit(font.render(txt, True, GREEN), (WORK.x + 300, y + 34))
+            screen.blit(self._fit_img(txt, GREEN, room), (status_x, y + 34))
         else:
-            screen.blit(self.f_small.render(f"{n_left} ? left", True, GREY), (WORK.x + 330, y + 32))
+            screen.blit(self._fit_img(f"{n_left} ? left", GREY, room), (status_x, y + 34))
 
     # ---------------- drawing: cmux ----------------
     def _draw_cmux(self, screen):
@@ -1327,21 +1390,24 @@ class BasicCombinationalPuzzle(BasicGatesPuzzle):
         n_sel = step["n_sel"]
         nslots = 1 << n_sel
         exp_full = step["nvars"] != n_sel
-        screen.blit(self.f_small.render(step["fn_text"], True, CYAN), (WORK.x + 18, WORK.y + 12))
-        hint = ("Each slot: look at the pair of rows for that select code."
-                if exp_full else "Each slot: is its minterm in the list?")
-        screen.blit(self.f_tiny.render(hint, True, GREY), (WORK.x + 18, WORK.y + 36))
+        screen.blit(self._fit_img(step["fn_text"], CYAN, WORK.width - 36), (WORK.x + 18, WORK.y + 12))
+        hint = ("Each box I0, I1 ... is one slot. Read the two numbers beside it, then choose what goes in."
+                if exp_full else "Each slot: is its number m in the list? Put 1 if yes, 0 if no.")
+        screen.blit(self._fit_img(hint, GREY, WORK.width - 36, (self.f_tiny,)), (WORK.x + 18, WORK.y + 36))
         top = WORK.y + 62
         avail = WORK.height - 62 - 96
         rh = min(34, avail // nslots)
         sel_names = step["sel_names"]
-        bx0, bx1 = WORK.x + 420, WORK.x + 484
+        bx0 = max(WORK.x + 392, min(WORK.x + 420, WORK.right - 130))
+        bx1 = bx0 + 64
         ytop = top
         ybot = top + rh * nslots
         pts = [(bx0, ytop), (bx1, ytop + 14), (bx1, ybot - 14), (bx0, ybot)]
         pygame.draw.polygon(screen, PANEL, pts)
         pygame.draw.polygon(screen, WHITE, pts, 2)
         lab = self.f_small.render(f"MUX {nslots}:1", True, WHITE)
+        if lab.get_width() > (bx1 - bx0) - 4:
+            lab = self.f_tiny.render(f"MUX {nslots}:1", True, WHITE)
         screen.blit(lab, lab.get_rect(center=((bx0 + bx1) // 2, (ytop + ybot) // 2)))
         for k in range(nslots):
             y = top + k * rh
@@ -1358,12 +1424,13 @@ class BasicCombinationalPuzzle(BasicGatesPuzzle):
                 txt = f"I{k}  {''.join(sel_names)}={code}   m{m0}={lo}  m{m1}={hi}"
             else:
                 txt = f"I{k}  {''.join(sel_names)}={code}   m{k} = {lo}"
-            screen.blit(self.f_tiny.render(txt, True, WHITE), (row.x + 8, row.centery - 8))
+            img = self._fit_img(txt, WHITE, row.w - 14, (self.f_tiny,))
+            screen.blit(img, (row.x + 8, row.centery - img.get_height() // 2))
             chosen = st["slots"][k]
             chip = pygame.Rect(WORK.x + 326, y + 3, 56, rh - 6)
             pygame.draw.rect(screen, (30, 70, 56) if chosen else (30, 34, 44), chip, border_radius=6)
             pygame.draw.rect(screen, GREEN if chosen else GREY, chip, 2, border_radius=6)
-            img = self.f_small.render(chosen or "?", True, WHITE if chosen else GREY)
+            img = self._fit_img(chosen or "?", WHITE if chosen else GREY, chip.w - 6)
             screen.blit(img, img.get_rect(center=chip.center))
             pygame.draw.line(screen, GREEN if chosen else GREY, (chip.right, cy), (bx0, cy), 2)
             self.buttons.append((row, ("mslot", k)))
@@ -1372,8 +1439,8 @@ class BasicCombinationalPuzzle(BasicGatesPuzzle):
         pygame.draw.line(screen, GREY, (bx1, oy), (bx1 + 36, oy), 3)
         screen.blit(self.f_body.render("F", True, YELLOW), (bx1 + 44, oy - 10))
         sx = (bx0 + bx1) // 2 - 8
-        screen.blit(self.f_tiny.render("selects: " + " ".join(sel_names), True, CYAN),
-                    (bx0 - 8, ybot + 6))
+        screen.blit(self._fit_img("selects: " + " ".join(sel_names), CYAN, WORK.right - (bx0 - 8) - 8,
+                                  (self.f_tiny,)), (bx0 - 8, ybot + 6))
         # option buttons
         y = WORK.bottom - 70
         screen.blit(self.f_small.render(f"Selected slot: I{st['sel']}", True, YELLOW), (WORK.x + 18, y))
@@ -1387,12 +1454,18 @@ class BasicCombinationalPuzzle(BasicGatesPuzzle):
         step, st = self.step, self.st
         y = WORK.y + 22
         for line in step["context"]:
-            screen.blit(self.f_title.render(line, True, WHITE), (WORK.x + 24, y))
+            # big title font when it fits, otherwise the normal body font (never runs off the box)
+            font = self.f_title if self.f_title.size(line)[0] <= WORK.width - 48 else self.f_body
+            img = font.render(line, True, WHITE)
+            if img.get_width() > WORK.width - 48:
+                img = self._fit_img(line, WHITE, WORK.width - 48, (self.f_small, self.f_tiny))
+            screen.blit(img, (WORK.x + 24, y))
             y += 40
         n = len(step["target"])
         xs = [WORK.centerx + (i - (n - 1) / 2.0) * 100 for i in range(n)]
         by = WORK.y + 280
-        screen.blit(self.f_small.render("YOUR ANSWER (click the bulbs)", True, GREEN), (WORK.x + 24, by - 80))
+        screen.blit(self.f_small.render("YOUR ANSWER (click the bulbs)", True, GREEN), (WORK.x + 24, by - 84))
+        screen.blit(self.f_tiny.render("Bulb ON = 1.   Bulb OFF = 0.", True, GREY), (WORK.x + 24, by - 60))
         for i, (x, v) in enumerate(zip(xs, st["bits"])):
             cx = int(x)
             draw_bulb(screen, cx, by, 32, v)
@@ -1404,7 +1477,8 @@ class BasicCombinationalPuzzle(BasicGatesPuzzle):
         num = 0
         for b in st["bits"]:
             num = num * 2 + b
-        screen.blit(self.f_body.render(f"Your bulbs read {num} in ordinary maths", True, CYAN),
+        screen.blit(self._fit_img(f"Your bulbs read {num} in ordinary maths", CYAN, WORK.width - 48,
+                                  (self.f_body, self.f_small, self.f_tiny)),
                     (WORK.x + 24, WORK.bottom - 34))
 
     # ---------------- drawing: choice pictures ----------------
@@ -1431,14 +1505,17 @@ class BasicCombinationalPuzzle(BasicGatesPuzzle):
             lines = ["Rows: A    Columns: B C", "Cells with a small number are m0 .. m7",
                      "1s at: " + ", ".join(str(m) for m in sorted(ones))]
             for i, line in enumerate(lines):
-                screen.blit(self.f_tiny.render(line, True, GREY), (tx, area.y + 30 + i * 20))
+                screen.blit(self._fit_img(line, GREY, area.right - tx - 4, (self.f_tiny,)),
+                            (tx, area.y + 30 + i * 20))
         elif visual == "xor":
             rows = [["0", "0", "0"], ["0", "1", "1"], ["1", "0", "1"], ["1", "1", "0"]]
             CL.draw_table(screen, pygame.Rect(area.x + 40, area.y + 2, 200, area.h - 4),
                           ["M", "B", "B xor M"], rows, None, CL.DARK, self.cfonts)
             lines = ["When M = 0 the output is B: unchanged.", "When M = 1 the output is NOT B."]
+            tx = area.x + 270
             for i, line in enumerate(lines):
-                screen.blit(self.f_small.render(line, True, WHITE), (area.x + 270, area.y + 30 + i * 28))
+                screen.blit(self._fit_img(line, WHITE, area.right - tx - 4),
+                            (tx, area.y + 30 + i * 28))
 
     # ---------------- stage-complete card ----------------
     def _done_text_height(self, stage):
@@ -1448,12 +1525,22 @@ class BasicCombinationalPuzzle(BasicGatesPuzzle):
             y += 24 + 23 * len(wrap_text(self.f_small, text, rw)) + 10
         return y
 
+    def _done_text_style(self, stage, rw, limit):
+        """Normal text if the four items fit above the footer, otherwise the smaller font."""
+        styles = ((self.f_small, 24, 23, 10), (self.f_tiny, 20, 19, 6))
+        for font, lab_h, line_h, gap in styles:
+            total = sum(lab_h + line_h * len(wrap_text(font, t, rw)) + gap for _l, t in stage["items"])
+            if total <= limit:
+                return font, lab_h, line_h, gap
+        return styles[-1]
+
     def _draw_done(self, screen):
         stage = self.stage
         pygame.draw.rect(screen, PANEL, FULL, border_radius=10)
         pygame.draw.rect(screen, GREEN, FULL, 3, border_radius=10)
         screen.blit(self.f_big.render(f"STAGE {self.stage_i + 1} COMPLETE", True, GREEN), (FULL.x + 24, FULL.y + 14))
-        screen.blit(self.f_body.render(f"{stage['title']}  -  {stage['sub']}", True, WHITE),
+        screen.blit(self._fit_img(f"{stage['title']}  -  {stage['sub']}", WHITE, FULL.width - 48,
+                                  (self.f_body, self.f_small, self.f_tiny)),
                     (FULL.x + 24, FULL.y + 62))
         left = pygame.Rect(FULL.x + 20, FULL.y + 100, 350, 290)
         kind = stage["done"][0]
@@ -1469,20 +1556,22 @@ class BasicCombinationalPuzzle(BasicGatesPuzzle):
         rx = FULL.x + 390
         rw = FULL.right - rx - 24
         y = FULL.y + 100
+        limit = (FULL.bottom - 70) - y                       # leave the footer lines free
+        font, lab_h, line_h, gap = self._done_text_style(stage, rw, limit)
         for label, text in stage["items"]:
             screen.blit(self.f_small.render(label, True, CYAN), (rx, y))
-            y += 24
-            for line in wrap_text(self.f_small, text, rw):
-                screen.blit(self.f_small.render(line, True, WHITE), (rx, y))
-                y += 23
-            y += 10
-        screen.blit(self.f_small.render(
-            "Saved to NOTEBOOK [N]  >  TEST THE LOGIC  >  MY BASIC NOTES", True, YELLOW),
-            (FULL.x + 24, FULL.bottom - 62))
-        screen.blit(self.f_tiny.render(
-            "Replay any circuit: NOTEBOOK > TEST THE LOGIC > COMBINATIONAL CIRCUITS", True, GREY),
-            (FULL.x + 24, FULL.bottom - 38))
+            y += lab_h
+            for line in wrap_text(font, text, rw):
+                screen.blit(font.render(line, True, WHITE), (rx, y))
+                y += line_h
+            y += gap
         rect = pygame.Rect(FULL.right - 230, FULL.bottom - 52, 210, 38)
+        foot_w = rect.x - (FULL.x + 24) - 14                 # footer text stops before the button
+        screen.blit(self._fit_img("Saved to NOTEBOOK [N]  >  TEST THE LOGIC  >  MY BASIC NOTES", YELLOW, foot_w),
+                    (FULL.x + 24, FULL.bottom - 62))
+        screen.blit(self._fit_img("Replay any circuit: NOTEBOOK > TEST THE LOGIC > COMBINATIONAL CIRCUITS",
+                                  GREY, foot_w, (self.f_tiny,)),
+                    (FULL.x + 24, FULL.bottom - 38))
         last = self.stage_i >= len(self.stages) - 1
         self._button(screen, rect, "FINISH LEVEL" if last else "NEXT STAGE  [ENTER]", ("next",), GREEN)
 
