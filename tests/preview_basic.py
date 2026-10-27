@@ -1,6 +1,7 @@
 """Play a Basic course directly, without walking through the lab or unlocking levels.
 
     python tests/preview_basic.py gates     Basic Level 1: logic gates from zero
+    python tests/preview_basic.py circuits  Basic Level 2: Circuit Lab (add a stage number, e.g. "circuits 7")
     python tests/preview_basic.py kmap      Basic Karnaugh maps
     python tests/preview_basic.py comb      Basic Level 5: combinational circuits
     python tests/preview_basic.py num       Basic Level 3: number systems and codes
@@ -21,12 +22,14 @@ import pygame
 import settings
 from notebook import DetectiveNotebook
 from puzzles.basic_gates import BasicGatesPuzzle
+from puzzles.basic_circuits import BasicCircuitLabPuzzle
 from puzzles.basic_kmap import BasicKarnaughPuzzle
 from puzzles.basic_comb import BasicCombinationalPuzzle
 from puzzles.basic_seq import BasicSequentialPuzzle
 from puzzles.basic_numbers import BasicNumberSystemsPuzzle
 
 COURSES = {"gates": BasicGatesPuzzle, "kmap": BasicKarnaughPuzzle,
+           "circuits": BasicCircuitLabPuzzle,
            "comb": BasicCombinationalPuzzle, "lab": BasicCombinationalPuzzle,
            "seq": BasicSequentialPuzzle,
            "num": BasicNumberSystemsPuzzle}
@@ -35,7 +38,7 @@ COURSES = {"gates": BasicGatesPuzzle, "kmap": BasicKarnaughPuzzle,
 def main():
     name = sys.argv[1] if len(sys.argv) > 1 else "kmap"
     if name not in COURSES:
-        print("usage: python tests/preview_basic.py [gates|num|kmap|comb|seq|lab]")
+        print("usage: python tests/preview_basic.py [gates|circuits|num|kmap|comb|seq|lab]")
         return
     pygame.init()
     screen = pygame.display.set_mode((settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT))
@@ -45,6 +48,11 @@ def main():
     notebook = DetectiveNotebook()
     notebook.set_mode("basic")
     puzzle = COURSES[name](notebook=notebook)
+    if name == "circuits" and len(sys.argv) > 2 and sys.argv[2].isdigit():
+        # optional stage jump: python tests/preview_basic.py circuits 7
+        puzzle.stage = max(1, min(10, int(sys.argv[2]))) - 1
+        puzzle.act = 0
+        puzzle._load_activity()
     if name == "lab":                      # jump straight into the notebook lab
         notebook.toggle()
         notebook._open_topic("COMBINATIONAL CIRCUITS")

@@ -15,6 +15,7 @@ from progress import ProgressManager
 
 from puzzles.logic_lock import LogicLockPuzzle
 from puzzles.basic_gates import BasicGatesPuzzle
+from puzzles.basic_circuits import BasicCircuitLabPuzzle
 from puzzles.basic_numbers import BasicNumberSystemsPuzzle
 from puzzles.basic_kmap import BasicKarnaughPuzzle
 from puzzles.basic_comb import BasicCombinationalPuzzle
@@ -983,6 +984,7 @@ def main():
     basic_sessions = {}       # puzzle_id -> Basic puzzle, keeps progress if the player leaves
     basic_puzzles = {
         "logic_lock": BasicGatesPuzzle,           # Level 1: logic gates from zero
+        "hidden_transmission": BasicCircuitLabPuzzle,  # Level 2 on the BASIC path: circuits and Boolean algebra
         "memory_protocol": BasicNumberSystemsPuzzle,  # Level 3 on the BASIC path: number systems and codes
         "final_override": BasicKarnaughPuzzle,    # Level 4 on the BASIC path: Karnaugh maps
         "logic_architect": BasicCombinationalPuzzle,  # Level 5 on the BASIC path: combinational circuits
@@ -1167,6 +1169,12 @@ def main():
                     pygame.MOUSEBUTTONUP,
                     pygame.MOUSEMOTION,
                 ):
+                    puzzle.handle_event(event)
+                elif (
+                    event.type == pygame.MOUSEWHEEL
+                    and isinstance(puzzle, BasicCircuitLabPuzzle)
+                ):
+                    # The Circuit Lab revision sheet scrolls with the wheel.
                     puzzle.handle_event(event)
 
                 if puzzle.is_solved():
